@@ -23,7 +23,7 @@
     "@google/genai": "^2.4.0",
     "@hookform/resolvers": "^5.2.1",
     "autoprefixer": "^10.4.21",
-    "@vercel/blob": "^1.2.0",
+    "@vercel/blob": "^2.8.0",
     "better-sqlite3": "^13.0.3",
     "pg": "^8.13.0",
     "class-variance-authority": "^0.7.1",
