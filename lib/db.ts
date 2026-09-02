@@ -437,6 +437,7 @@ let pgReady: Promise<void> | null = null;
 
 // Postgres wrapper — mimics better-sqlite3 sync API but via async pool
 function createPgWrapper(pool: any) {
+  let txClient: any = null;
   const wrap = {
     prepare: (sql: string) => {
       // Translate ? placeholders to $1, $2 for pg
@@ -463,21 +464,25 @@ function createPgWrapper(pool: any) {
       }
 
       const withPgReady = async (fn: () => Promise<any>) => {
-        if (pgReady) await pgReady;
+        if (pgReady) {
+          try { await pgReady; } catch (e) { console.warn('[db] pgReady wait failed in prepare:', (e as Error).message); }
+        }
         return fn();
       };
 
+      const queryFn = txClient ? txClient.query.bind(txClient) : pool.query.bind(pool);
+
       return {
         get: async (...params: any[]) => withPgReady(async () => {
-          const res = await pool.query(shimmed, params);
+          const res = await queryFn(shimmed, params);
           return res.rows[0];
         }),
         all: async (...params: any[]) => withPgReady(async () => {
-          const res = await pool.query(shimmed, params);
+          const res = await queryFn(shimmed, params);
           return res.rows;
         }),
         run: async (...params: any[]) => withPgReady(async () => {
-          const res = await pool.query(shimmed, params);
+          const res = await queryFn(shimmed, params);
           return { changes: res.rowCount, lastInsertRowid: res.rows[0]?.id };
         }),
       };
@@ -492,15 +497,18 @@ function createPgWrapper(pool: any) {
     transaction: (fn: any) => {
       return async (...args: any[]) => {
         const client = await pool.connect();
+        const prevTx = txClient;
+        txClient = client;
         try {
           await client.query('BEGIN');
           const result = await fn(...args);
           await client.query('COMMIT');
           return result;
         } catch (e) {
-          await client.query('ROLLBACK');
+          try { await client.query('ROLLBACK'); } catch {}
           throw e;
         } finally {
+          txClient = prevTx;
           client.release();
         }
       };
