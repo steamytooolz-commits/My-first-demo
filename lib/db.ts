@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -386,7 +387,113 @@ db.pragma('busy_timeout = 5000');
 
 // Auto-bootstrap ephemeral DBs (critical for Vercel /tmp where DB is recreated per cold start)
 ensureSchema(db);
+ensureDefaultSeed(db);
 
 if (process.env.NODE_ENV !== 'production') {
   globalForDb.db = db;
+}
+
+function hashPasswordForSeed(password: string): string {
+  const N = 16384;
+  const r = 8;
+  const p = 1;
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64, { N, r, p });
+  return `scrypt:${N}:${r}:${p}:${salt}:${derivedKey.toString('hex')}`;
+}
+
+function ensureDefaultSeed(database: Database.Database) {
+  try {
+    // Only seed if users table exists and is empty — handles Vercel /tmp cold start where DB is fresh
+    const hasUsersTable = database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get() as any;
+    if (!hasUsersTable) return;
+    const countRow = database.prepare('SELECT COUNT(*) as c FROM users').get() as any;
+    if (countRow && countRow.c > 0) return;
+
+    console.log('[db] No users found, seeding default demo accounts...');
+
+    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase();
+    const adminPassword = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
+    const adminId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    try {
+      database.prepare(`
+        INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at)
+        VALUES (?, ?, ?, 'System Administrator', '', 'admin', 'active', 0, ?, ?, ?)
+      `).run(adminId, adminEmail, hashPasswordForSeed(adminPassword), now, now, now);
+      console.log(`[db] Seeded admin: ${adminEmail}`);
+    } catch (e) {
+      console.warn('[db] Admin seed skipped:', (e as Error).message);
+    }
+
+    // Seed demo customer (only if SEED_DEMO !== false)
+    if (process.env.SEED_DEMO !== 'false') {
+      const demoEmail = 'customer@example.com';
+      const demoPassword = 'Customer123!';
+      const demoId = crypto.randomUUID();
+      try {
+        database.prepare(`
+          INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at)
+          VALUES (?, ?, ?, 'Thabo Mokoena', '', 'customer', 'active', 0, ?, ?, ?)
+        `).run(demoId, demoEmail, hashPasswordForSeed(demoPassword), now, now, now);
+
+        database.prepare(`
+          INSERT INTO addresses (id, user_id, label, full_name, phone, line1, line2, city, province, postal_code, country, is_default)
+          VALUES (?, ?, 'Home', 'Thabo Mokoena', '', '12 Protea Lane', 'Apt 4B', 'Rosebank', 'Gauteng', '2196', 'ZA', 1)
+        `).run(crypto.randomUUID(), demoId);
+        console.log(`[db] Seeded customer: ${demoEmail} / ${demoPassword}`);
+      } catch (e) {
+        console.warn('[db] Customer seed skipped:', (e as Error).message);
+      }
+    }
+
+    // Seed minimal store settings if missing
+    try {
+      const hasSettings = database.prepare("SELECT key FROM settings WHERE key='store'").get() as any;
+      if (!hasSettings) {
+        const storeSettings = {
+          store_name: 'Paper & Quill Stationery',
+          contact_email: 'hello@paperandquill.co.za',
+          phone: '',
+          address_line1: '42 Bram Fischer Drive',
+          address_line2: 'Ferndale',
+          city: 'Johannesburg',
+          province: 'Gauteng',
+          postal_code: '2194',
+          country: 'ZA',
+          currency: 'ZAR',
+          tax_enabled: false,
+          tax_rate_percent: 0,
+          prices_include_tax: true,
+          shipping_taxable: true,
+          free_shipping_enabled: true,
+          free_shipping_threshold_cents: 95000,
+          standard_base_cents: 7500,
+          express_base_cents: 15000,
+          weight_threshold_g: 5000,
+          weight_surcharge_cents: 2500,
+          express_weight_surcharge_cents: 5000,
+          invoice_prefix: 'INV',
+          order_prefix: 'ORD',
+          invoice_due_days: 14,
+          bank_name: 'First National Bank',
+          bank_account_name: 'Paper & Quill Stationery (Pty) Ltd',
+          bank_account_number: '62000000000',
+          bank_branch_code: '250655',
+          bank_reference_note: 'Please use your Order Number as payment reference',
+          vat_number: '',
+        };
+        database.prepare(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`).run(JSON.stringify(storeSettings));
+        console.log('[db] Seeded store settings');
+      }
+    } catch {}
+
+    // Note: Full catalog seed (12 products) is intentionally not auto-seeded at runtime to keep cold-start fast.
+    // Catalog will be empty on fresh Vercel /tmp DB until you run `bun run db:seed` via Build Command
+    // or set Build Command to `bun run db:migrate && bun run db:seed && bun run build`.
+    // For demo login, admin/customer above is sufficient.
+  } catch (e) {
+    console.error('[db] Default seed failed:', e);
+  }
 }
