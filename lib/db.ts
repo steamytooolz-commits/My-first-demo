@@ -438,20 +438,18 @@ function createPgWrapper(pool: any) {
       // Translate ? placeholders to $1, $2 for pg
       let idx = 0;
       const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      // SQLite -> Postgres dialect shims
+      // SQLite -> Postgres dialect shims — generic datetime -> NOW()
       let shimmed = pgSql
         .replace(/COLLATE NOCASE/g, '')
         .replace(/INSERT OR IGNORE INTO sequences/g, 'INSERT INTO sequences')
         .replace(/INSERT OR IGNORE/g, 'INSERT')
         .replace(/ON CONFLICT\(key\) DO UPDATE SET value_json = excluded\.value_json/g, 'ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json')
         .replace(/ON CONFLICT\(key\) DO NOTHING/g, 'ON CONFLICT (key) DO NOTHING')
-        .replace(/datetime\('now'\)/g, 'NOW()')
-        .replace(/datetime\('now', '-2 days'\)/g, "NOW() - INTERVAL '2 days'")
-        .replace(/datetime\('now', '-4 hours'\)/g, "NOW() - INTERVAL '4 hours'")
-        .replace(/date\('now', '-2 days'\)/g, "CURRENT_DATE - INTERVAL '2 days'")
-        .replace(/date\('now'\)/g, 'CURRENT_DATE')
+        .replace(/datetime\([^)]*\)/g, 'NOW()')
         .replace(/date\('now', '\+12 days'\)/g, "CURRENT_DATE + INTERVAL '12 days'")
-        .replace(/date\('now', '\+14 days'\)/g, "CURRENT_DATE + INTERVAL '14 days'");
+        .replace(/date\('now', '\+14 days'\)/g, "CURRENT_DATE + INTERVAL '14 days'")
+        .replace(/date\('now', '-2 days'\)/g, "CURRENT_DATE - INTERVAL '2 days'")
+        .replace(/date\('now'\)/g, 'CURRENT_DATE');
       // Handle INSERT OR IGNORE without explicit ON CONFLICT — add DO NOTHING for sequences/schema_migrations
       if (shimmed.includes('INSERT INTO sequences') && !shimmed.includes('ON CONFLICT')) {
         shimmed = shimmed.replace('INSERT INTO sequences', 'INSERT INTO sequences ON CONFLICT (kind, year) DO NOTHING');
