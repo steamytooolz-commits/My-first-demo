@@ -14,14 +14,14 @@ interface AdminOrderDetailPageProps {
 export default async function AdminOrderDetailPage({ params }: AdminOrderDetailPageProps) {
   const { id } = await params;
 
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as any;
+  const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as any;
   if (!order) {
     notFound();
   }
 
-  const items = db.prepare('SELECT * FROM order_items WHERE order_id = ? ORDER BY rowid ASC').all(id) as any[];
-  const invoice = db.prepare('SELECT * FROM invoices WHERE order_id = ?').get(id) as any;
-  const events = db.prepare('SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at DESC').all(id) as any[];
+  const items = await db.prepare('SELECT * FROM order_items WHERE order_id = ? ORDER BY rowid ASC').all(id) as any[];
+  const invoice = await db.prepare('SELECT * FROM invoices WHERE order_id = ?').get(id) as any;
+  const events = await db.prepare('SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at DESC').all(id) as any[];
 
   const shippingAddr = JSON.parse(order.shipping_address_json || '{}');
 

@@ -8,7 +8,7 @@ import { ArrowRight, Truck, ShieldCheck, Feather, FileText } from 'lucide-react'
 
 export default async function HomePage() {
   // Fetch active categories with product counts
-  const categories = db.prepare(`
+  const categories = await db.prepare(`
     SELECT c.id, c.name, c.slug, c.description,
            (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.active = 1) as product_count
     FROM categories c
@@ -17,7 +17,7 @@ export default async function HomePage() {
   `).all() as any[];
 
   // Fetch featured products with variant aggregation
-  const rawFeatured = db.prepare(`
+  const rawFeatured = await db.prepare(`
     SELECT 
       p.id, p.name, p.slug, p.brand,
       c.name as category_name,

@@ -3,7 +3,7 @@ import { adminSaveSettingsAction } from '@/app/actions/admin';
 import { Store, Landmark, Truck, FileText, CheckCircle } from 'lucide-react';
 
 export default async function AdminSettingsPage() {
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
   return (
     <div className="space-y-8 max-w-4xl">

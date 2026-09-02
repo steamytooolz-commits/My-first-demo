@@ -6,7 +6,7 @@ import { MapPin, Plus, Trash2, CheckCircle } from 'lucide-react';
 export default async function CustomerAddressesPage() {
   const user = await requireUser();
 
-  const addresses = db.prepare(`
+  const addresses = await db.prepare(`
     SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, rowid DESC
   `).all(user.id) as any[];
 

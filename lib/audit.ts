@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import { db } from './db';
 
-export function logAudit(
+export async function logAudit(
   actorId: string | null,
   action: string,
   entity: string,
   entityId?: string | null,
   data?: Record<string, any>
-): void {
+): Promise<void> {
   try {
     const id = crypto.randomUUID();
     // Ensure sensitive fields are never saved to audit logs
@@ -21,7 +21,7 @@ export function logAudit(
       delete sanitizedData.cardNumber;
     }
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO audit_logs (id, actor_id, action, entity, entity_id, data_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(

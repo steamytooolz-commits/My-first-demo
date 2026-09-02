@@ -68,7 +68,7 @@ export interface InvoiceRecord {
 /**
  * Issue an invoice for an order inside a transaction
  */
-export function createInvoiceForOrder(
+export async function createInvoiceForOrder(
   order: {
     id: string;
     order_number: string;
@@ -84,10 +84,10 @@ export function createInvoiceForOrder(
   status: 'issued' | 'paid' = 'issued',
   amountPaidCents: number = 0,
   notes: string = ''
-): InvoiceRecord {
-  const settings = getStoreSettings();
+): Promise<InvoiceRecord> {
+  const settings = await getStoreSettings();
   const invoiceId = crypto.randomUUID();
-  const invoiceNumber = nextSequence('invoice', settings.invoice_prefix || 'INV');
+  const invoiceNumber = await nextSequence('invoice', settings.invoice_prefix || 'INV');
 
   const now = new Date();
   const issueDate = now.toISOString().split('T')[0];
@@ -112,7 +112,7 @@ export function createInvoiceForOrder(
     bank_reference_note: settings.bank_reference_note,
   };
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO invoices (
       id, invoice_number, order_id, status, issue_date, due_date, currency,
       subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
@@ -143,5 +143,5 @@ export function createInvoiceForOrder(
     notes
   );
 
-  return db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId) as InvoiceRecord;
+  return await db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId) as InvoiceRecord;
 }

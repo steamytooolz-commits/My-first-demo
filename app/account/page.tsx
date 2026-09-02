@@ -8,11 +8,11 @@ import { Package, ArrowRight, CheckCircle, Clock } from 'lucide-react';
 export default async function AccountOverviewPage() {
   const user = await requireUser();
 
-  const orders = db.prepare(`
+  const orders = await db.prepare(`
     SELECT * FROM orders WHERE user_id = ? ORDER BY placed_at DESC LIMIT 5
   `).all(user.id) as any[];
 
-  const orderStats = db.prepare(`
+  const orderStats = await db.prepare(`
     SELECT COUNT(*) as total_orders, COALESCE(SUM(total_cents), 0) as total_spent
     FROM orders WHERE user_id = ? AND status != 'cancelled'
   `).get(user.id) as any;

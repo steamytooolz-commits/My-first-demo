@@ -6,7 +6,7 @@ import { ShieldCheck, Download, Trash2, AlertTriangle, CheckCircle } from 'lucid
 export default async function CustomerPrivacyPage() {
   const user = await requireUser();
 
-  const pendingErasure = db.prepare(`
+  const pendingErasure = await db.prepare(`
     SELECT * FROM data_subject_requests
     WHERE user_id = ? AND type = 'erasure' AND status = 'pending'
     ORDER BY created_at DESC LIMIT 1

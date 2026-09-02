@@ -18,14 +18,14 @@ interface ProductEditPageProps {
 export default async function AdminProductDetailPage({ params }: ProductEditPageProps) {
   const { id } = await params;
 
-  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id) as any;
+  const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(id) as any;
   if (!product) {
     notFound();
   }
 
-  const categories = db.prepare('SELECT id, name FROM categories ORDER BY name ASC').all() as any[];
-  const variants = db.prepare('SELECT * FROM product_variants WHERE product_id = ? ORDER BY price_cents ASC').all(id) as any[];
-  const images = db.prepare('SELECT url FROM product_images WHERE product_id = ? LIMIT 1').all(id) as any[];
+  const categories = await db.prepare('SELECT id, name FROM categories ORDER BY name ASC').all() as any[];
+  const variants = await db.prepare('SELECT * FROM product_variants WHERE product_id = ? ORDER BY price_cents ASC').all(id) as any[];
+  const images = await db.prepare('SELECT url FROM product_images WHERE product_id = ? LIMIT 1').all(id) as any[];
 
   return (
     <div className="space-y-8 max-w-5xl">

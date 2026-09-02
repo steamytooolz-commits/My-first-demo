@@ -27,7 +27,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const sort = resolvedParams.sort || 'featured';
 
   // Categories list for filter sidebar
-  const categories = db.prepare(`
+  const categories = await db.prepare(`
     SELECT id, name, slug,
            (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.active = 1) as count
     FROM categories c
@@ -92,7 +92,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
     ORDER BY ${orderBy}
   `;
 
-  const products = db.prepare(query).all(...queryParams) as any[];
+  const products = await db.prepare(query).all(...queryParams) as any[];
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">

@@ -39,7 +39,7 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
 
   query += ` ORDER BY p.created_at DESC`;
 
-  const products = db.prepare(query).all(...params) as any[];
+  const products = await db.prepare(query).all(...params) as any[];
 
   return (
     <div className="space-y-6">

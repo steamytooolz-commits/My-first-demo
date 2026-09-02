@@ -54,7 +54,7 @@ export async function findActiveCart(): Promise<{ cartId: string; isGuest: boole
   const cookieStore = await cookies();
 
   if (user) {
-    const cart = db.prepare(`
+    const cart = await db.prepare(`
       SELECT id FROM carts WHERE user_id = ? AND status = 'active'
     `).get(user.id) as { id: string } | undefined;
 
@@ -66,7 +66,7 @@ export async function findActiveCart(): Promise<{ cartId: string; isGuest: boole
   // Guest cart check
   const guestToken = cookieStore.get(GUEST_CART_COOKIE_NAME)?.value;
   if (guestToken) {
-    const cart = db.prepare(`
+    const cart = await db.prepare(`
       SELECT id FROM carts WHERE guest_token = ? AND status = 'active'
     `).get(guestToken) as { id: string } | undefined;
 
@@ -93,7 +93,7 @@ export async function getOrCreateActiveCart(): Promise<{ cartId: string; isGuest
 
   if (user) {
     const cartId = crypto.randomUUID();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO carts (id, user_id, guest_token, status, shipping_method, created_at, updated_at)
       VALUES (?, ?, NULL, 'active', 'standard', datetime('now'), datetime('now'))
     `).run(cartId, user.id);
@@ -104,7 +104,7 @@ export async function getOrCreateActiveCart(): Promise<{ cartId: string; isGuest
   const newGuestToken = crypto.randomBytes(24).toString('hex');
   const cartId = crypto.randomUUID();
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO carts (id, user_id, guest_token, status, shipping_method, created_at, updated_at)
     VALUES (?, NULL, ?, 'active', 'standard', datetime('now'), datetime('now'))
   `).run(cartId, newGuestToken);
@@ -133,21 +133,21 @@ export async function mergeGuestCart(userId: string): Promise<void> {
   const guestToken = cookieStore.get(GUEST_CART_COOKIE_NAME)?.value;
   if (!guestToken) return;
 
-  const guestCart = db.prepare(`
+  const guestCart = await db.prepare(`
     SELECT id, coupon_code, shipping_method FROM carts WHERE guest_token = ? AND status = 'active'
   `).get(guestToken) as { id: string; coupon_code: string | null; shipping_method: string } | undefined;
 
   if (!guestCart) return;
 
-  db.transaction(() => {
+  await db.transaction(async () => {
     // Find or create active user cart
-    let userCart = db.prepare(`
+    let userCart = await db.prepare(`
       SELECT id, coupon_code, shipping_method FROM carts WHERE user_id = ? AND status = 'active'
     `).get(userId) as { id: string; coupon_code: string | null; shipping_method: string } | undefined;
 
     if (!userCart) {
       const newCartId = crypto.randomUUID();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO carts (id, user_id, guest_token, status, coupon_code, shipping_method, created_at, updated_at)
         VALUES (?, ?, NULL, 'active', ?, ?, datetime('now'), datetime('now'))
       `).run(newCartId, userId, guestCart.coupon_code, guestCart.shipping_method || 'standard');
@@ -155,7 +155,7 @@ export async function mergeGuestCart(userId: string): Promise<void> {
     }
 
     // Get items from guest cart
-    const guestItems = db.prepare(`
+    const guestItems = await db.prepare(`
       SELECT ci.variant_id, ci.qty, pv.stock_qty, pv.price_cents
       FROM cart_items ci
       JOIN product_variants pv ON ci.variant_id = pv.id
@@ -163,7 +163,7 @@ export async function mergeGuestCart(userId: string): Promise<void> {
     `).all(guestCart.id) as { variant_id: string; qty: number; stock_qty: number; price_cents: number }[];
 
     for (const item of guestItems) {
-      const existingUserItem = db.prepare(`
+      const existingUserItem = await db.prepare(`
         SELECT id, qty FROM cart_items WHERE cart_id = ? AND variant_id = ?
       `).get(userCart.id, item.variant_id) as { id: string; qty: number } | undefined;
 
@@ -171,7 +171,7 @@ export async function mergeGuestCart(userId: string): Promise<void> {
       if (existingUserItem) {
         const combinedQty = Math.min(existingUserItem.qty + item.qty, currentStock);
         if (combinedQty > 0) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE cart_items
             SET qty = ?, unit_price_cents = ?, updated_at = datetime('now')
             WHERE id = ?
@@ -180,7 +180,7 @@ export async function mergeGuestCart(userId: string): Promise<void> {
       } else {
         const targetQty = Math.min(item.qty, currentStock);
         if (targetQty > 0) {
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO cart_items (id, cart_id, variant_id, qty, unit_price_cents, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
           `).run(crypto.randomUUID(), userCart.id, item.variant_id, targetQty, item.price_cents);
@@ -189,7 +189,7 @@ export async function mergeGuestCart(userId: string): Promise<void> {
     }
 
     // Mark guest cart as converted/abandoned and clear cookie
-    db.prepare(`UPDATE carts SET status = 'abandoned', updated_at = datetime('now') WHERE id = ?`).run(guestCart.id);
+    await db.prepare(`UPDATE carts SET status = 'abandoned', updated_at = datetime('now') WHERE id = ?`).run(guestCart.id);
   })();
 
   try {
@@ -211,7 +211,7 @@ export async function mergeGuestCart(userId: string): Promise<void> {
  */
 export async function getCartSummary(): Promise<CartSummary> {
   const activeCart = await findActiveCart();
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
   if (!activeCart) {
     return {
@@ -239,7 +239,7 @@ export async function getCartSummary(): Promise<CartSummary> {
   const { cartId } = activeCart;
   const user = await getSessionUser();
 
-  const cartRow = db.prepare(`
+  const cartRow = await db.prepare(`
     SELECT id, coupon_code, shipping_method FROM carts WHERE id = ?
   `).get(cartId) as { id: string; coupon_code: string | null; shipping_method: string } | undefined;
 
@@ -248,7 +248,7 @@ export async function getCartSummary(): Promise<CartSummary> {
   let couponWarning: string | null = null;
 
   // Query raw items with current variant prices, stock, and product details
-  const rawItems = db.prepare(`
+  const rawItems = await db.prepare(`
     SELECT 
       ci.id,
       ci.cart_id,
@@ -312,7 +312,7 @@ export async function getCartSummary(): Promise<CartSummary> {
   let isFreeShippingCoupon = false;
 
   if (couponCode && subtotalCents > 0) {
-    const coupon = db.prepare(`
+    const coupon = await db.prepare(`
       SELECT * FROM coupons WHERE code = ? COLLATE NOCASE
     `).get(couponCode) as any;
 
@@ -335,7 +335,7 @@ export async function getCartSummary(): Promise<CartSummary> {
       valid = false;
       couponWarning = 'Coupon usage limit has been reached';
     } else if (coupon.one_per_customer && user) {
-      const redemption = db.prepare(`
+      const redemption = await db.prepare(`
         SELECT id FROM coupon_redemptions WHERE coupon_id = ? AND user_id = ?
       `).get(coupon.id, user.id);
       if (redemption) {
@@ -346,7 +346,7 @@ export async function getCartSummary(): Promise<CartSummary> {
 
     if (!valid) {
       // Remove invalid coupon from cart
-      db.prepare(`UPDATE carts SET coupon_code = NULL, updated_at = datetime('now') WHERE id = ?`).run(cartId);
+      await db.prepare(`UPDATE carts SET coupon_code = NULL, updated_at = datetime('now') WHERE id = ?`).run(cartId);
       couponCode = null;
     } else {
       if (coupon.type === 'percent') {
@@ -362,7 +362,7 @@ export async function getCartSummary(): Promise<CartSummary> {
       }
     }
   } else if (couponCode && subtotalCents === 0) {
-    db.prepare(`UPDATE carts SET coupon_code = NULL, updated_at = datetime('now') WHERE id = ?`).run(cartId);
+    await db.prepare(`UPDATE carts SET coupon_code = NULL, updated_at = datetime('now') WHERE id = ?`).run(cartId);
     couponCode = null;
   }
 
@@ -433,7 +433,7 @@ export async function getCartSummary(): Promise<CartSummary> {
 export async function addToCart(variantId: string, qty: number): Promise<{ success: boolean; error?: string }> {
   if (qty <= 0) return { success: false, error: 'Quantity must be at least 1' };
 
-  const variant = db.prepare(`
+  const variant = await db.prepare(`
     SELECT pv.id, pv.stock_qty, pv.price_cents, pv.active as variant_active, p.active as product_active
     FROM product_variants pv
     JOIN products p ON pv.product_id = p.id
@@ -446,7 +446,7 @@ export async function addToCart(variantId: string, qty: number): Promise<{ succe
 
   const { cartId } = await getOrCreateActiveCart();
 
-  const existingItem = db.prepare(`
+  const existingItem = await db.prepare(`
     SELECT id, qty FROM cart_items WHERE cart_id = ? AND variant_id = ?
   `).get(cartId, variantId) as { id: string; qty: number } | undefined;
 
@@ -461,19 +461,19 @@ export async function addToCart(variantId: string, qty: number): Promise<{ succe
   }
 
   if (existingItem) {
-    db.prepare(`
+    await db.prepare(`
       UPDATE cart_items
       SET qty = ?, unit_price_cents = ?, updated_at = datetime('now')
       WHERE id = ?
     `).run(newQty, variant.price_cents, existingItem.id);
   } else {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO cart_items (id, cart_id, variant_id, qty, unit_price_cents, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(crypto.randomUUID(), cartId, variantId, qty, variant.price_cents);
   }
 
-  db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
+  await db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
   return { success: true };
 }
 
@@ -484,25 +484,25 @@ export async function updateCartItemQuantity(variantId: string, qty: number): Pr
   const { cartId } = await getOrCreateActiveCart();
 
   if (qty <= 0) {
-    db.prepare(`DELETE FROM cart_items WHERE cart_id = ? AND variant_id = ?`).run(cartId, variantId);
-    db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
+    await db.prepare(`DELETE FROM cart_items WHERE cart_id = ? AND variant_id = ?`).run(cartId, variantId);
+    await db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
     return { success: true };
   }
 
-  const variant = db.prepare('SELECT stock_qty, price_cents FROM product_variants WHERE id = ?').get(variantId) as { stock_qty: number; price_cents: number } | undefined;
+  const variant = await db.prepare('SELECT stock_qty, price_cents FROM product_variants WHERE id = ?').get(variantId) as { stock_qty: number; price_cents: number } | undefined;
   if (!variant) return { success: false, error: 'Product variant not found' };
 
   if (qty > variant.stock_qty) {
     return { success: false, error: `Only ${variant.stock_qty} available in stock` };
   }
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE cart_items
     SET qty = ?, unit_price_cents = ?, updated_at = datetime('now')
     WHERE cart_id = ? AND variant_id = ?
   `).run(qty, variant.price_cents, cartId, variantId);
 
-  db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
+  await db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
   return { success: true };
 }
 
@@ -511,8 +511,8 @@ export async function updateCartItemQuantity(variantId: string, qty: number): Pr
  */
 export async function removeCartItem(variantId: string): Promise<void> {
   const { cartId } = await getOrCreateActiveCart();
-  db.prepare(`DELETE FROM cart_items WHERE cart_id = ? AND variant_id = ?`).run(cartId, variantId);
-  db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
+  await db.prepare(`DELETE FROM cart_items WHERE cart_id = ? AND variant_id = ?`).run(cartId, variantId);
+  await db.prepare(`UPDATE carts SET updated_at = datetime('now') WHERE id = ?`).run(cartId);
 }
 
 /**
@@ -520,7 +520,7 @@ export async function removeCartItem(variantId: string): Promise<void> {
  */
 export async function setShippingMethod(method: 'pickup' | 'standard' | 'express'): Promise<void> {
   const { cartId } = await getOrCreateActiveCart();
-  db.prepare(`UPDATE carts SET shipping_method = ?, updated_at = datetime('now') WHERE id = ?`).run(method, cartId);
+  await db.prepare(`UPDATE carts SET shipping_method = ?, updated_at = datetime('now') WHERE id = ?`).run(method, cartId);
 }
 
 /**
@@ -530,13 +530,13 @@ export async function applyCoupon(code: string): Promise<{ success: boolean; err
   const trimmed = code.trim();
   if (!trimmed) return { success: false, error: 'Coupon code cannot be empty' };
 
-  const coupon = db.prepare('SELECT * FROM coupons WHERE code = ? COLLATE NOCASE').get(trimmed) as any;
+  const coupon = await db.prepare('SELECT * FROM coupons WHERE code = ? COLLATE NOCASE').get(trimmed) as any;
   if (!coupon || !coupon.active) {
     return { success: false, error: 'Invalid or inactive coupon code' };
   }
 
   const { cartId } = await getOrCreateActiveCart();
-  db.prepare(`UPDATE carts SET coupon_code = ?, updated_at = datetime('now') WHERE id = ?`).run(coupon.code, cartId);
+  await db.prepare(`UPDATE carts SET coupon_code = ?, updated_at = datetime('now') WHERE id = ?`).run(coupon.code, cartId);
   return { success: true };
 }
 
@@ -545,5 +545,5 @@ export async function applyCoupon(code: string): Promise<{ success: boolean; err
  */
 export async function removeCoupon(): Promise<void> {
   const { cartId } = await getOrCreateActiveCart();
-  db.prepare(`UPDATE carts SET coupon_code = NULL, updated_at = datetime('now') WHERE id = ?`).run(cartId);
+  await db.prepare(`UPDATE carts SET coupon_code = NULL, updated_at = datetime('now') WHERE id = ?`).run(cartId);
 }

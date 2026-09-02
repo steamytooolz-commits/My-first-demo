@@ -15,15 +15,15 @@ export interface CustomerDataExport {
 /**
  * Generate full personal data export as JSON
  */
-export function generateCustomerExport(userId: string): CustomerDataExport {
-  const user = db.prepare(`
+export async function generateCustomerExport(userId: string): Promise<CustomerDataExport> {
+  const user = await db.prepare(`
     SELECT id, email, full_name, phone, role, status, marketing_consent,
            poia_processing_consent_at, created_at, updated_at
     FROM users WHERE id = ?
   `).get(userId) as any;
 
-  const addresses = db.prepare(`SELECT * FROM addresses WHERE user_id = ?`).all(userId);
-  const orders = db.prepare(`SELECT * FROM orders WHERE user_id = ?`).all(userId);
+  const addresses = await db.prepare(`SELECT * FROM addresses WHERE user_id = ?`).all(userId);
+  const orders = await db.prepare(`SELECT * FROM orders WHERE user_id = ?`).all(userId);
 
   const orderIds = orders.map((o: any) => o.id);
   let invoices: any[] = [];
@@ -31,11 +31,11 @@ export function generateCustomerExport(userId: string): CustomerDataExport {
 
   if (orderIds.length > 0) {
     const placeholders = orderIds.map(() => '?').join(',');
-    invoices = db.prepare(`SELECT * FROM invoices WHERE order_id IN (${placeholders})`).all(...orderIds);
-    payments = db.prepare(`SELECT * FROM payments WHERE order_id IN (${placeholders})`).all(...orderIds);
+    invoices = await db.prepare(`SELECT * FROM invoices WHERE order_id IN (${placeholders})`).all(...orderIds);
+    payments = await db.prepare(`SELECT * FROM payments WHERE order_id IN (${placeholders})`).all(...orderIds);
   }
 
-  const privacyRequests = db.prepare(`SELECT * FROM data_subject_requests WHERE user_id = ?`).all(userId);
+  const privacyRequests = await db.prepare(`SELECT * FROM data_subject_requests WHERE user_id = ?`).all(userId);
 
   return {
     exported_at: new Date().toISOString(),
@@ -51,8 +51,8 @@ export function generateCustomerExport(userId: string): CustomerDataExport {
 /**
  * Request account erasure under POPIA
  */
-export function requestAccountErasure(userId: string, reason?: string): { success: boolean; scheduledFor: string; error?: string } {
-  const existing = db.prepare(`
+export async function requestAccountErasure(userId: string, reason?: string): Promise<{ success: boolean; scheduledFor: string; error?: string }> {
+  const existing = await db.prepare(`
     SELECT id, scheduled_for FROM data_subject_requests
     WHERE user_id = ? AND type = 'erasure' AND status = 'pending'
   `).get(userId) as { id: string; scheduled_for: string } | undefined;
@@ -64,7 +64,7 @@ export function requestAccountErasure(userId: string, reason?: string): { succes
   const id = crypto.randomUUID();
   const scheduledFor = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO data_subject_requests (id, user_id, type, status, reason, scheduled_for, created_at)
     VALUES (?, ?, 'erasure', 'pending', ?, ?, datetime('now'))
   `).run(id, userId, reason || 'Customer requested account erasure via privacy portal', scheduledFor);
@@ -75,9 +75,10 @@ export function requestAccountErasure(userId: string, reason?: string): { succes
 /**
  * Process an erasure request (anonymize user profile, delete sessions and addresses, redact order records)
  */
-export function processErasure(requestId: string, actorId?: string): boolean {
-  return db.transaction(() => {
-    const request = db.prepare(`
+export async function processErasure(requestId: string, actorId?: string): Promise<boolean> {
+  const { isPg } = await import('./db');
+  const exec = async () => {
+    const request = await db.prepare(`
       SELECT * FROM data_subject_requests WHERE id = ?
     `).get(requestId) as any;
 
@@ -87,14 +88,14 @@ export function processErasure(requestId: string, actorId?: string): boolean {
     const now = new Date().toISOString();
 
     // 1. Delete all sessions
-    db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(userId);
+    await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(userId);
 
     // 2. Delete all saved addresses
-    db.prepare(`DELETE FROM addresses WHERE user_id = ?`).run(userId);
+    await db.prepare(`DELETE FROM addresses WHERE user_id = ?`).run(userId);
 
     // 3. Anonymize user profile
     const anonymousEmail = `erased-${userId}@invalid.local`;
-    db.prepare(`
+    await db.prepare(`
       UPDATE users
       SET 
         email = ?,
@@ -120,7 +121,7 @@ export function processErasure(requestId: string, actorId?: string): boolean {
       country: 'ZA',
     });
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE orders
       SET 
         email = ?,
@@ -143,25 +144,30 @@ export function processErasure(requestId: string, actorId?: string): boolean {
       country: 'ZA',
     });
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE invoices
       SET buyer_json = ?, updated_at = ?
       WHERE order_id IN (SELECT id FROM orders WHERE user_id = ?)
     `).run(redactedBuyer, now, userId);
 
     // 6. Complete request
-    db.prepare(`
+    await db.prepare(`
       UPDATE data_subject_requests
       SET status = 'completed', completed_at = ?
       WHERE id = ?
     `).run(now, requestId);
 
     // 7. Audit log
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO audit_logs (id, actor_id, action, entity, entity_id, data_json, created_at)
       VALUES (?, ?, 'process_erasure', 'user', ?, ?, datetime('now'))
     `).run(crypto.randomUUID(), actorId ?? null, userId, JSON.stringify({ requestId, anonymized: true }));
 
     return true;
-  })();
+  };
+  if (isPg) {
+    return await (db as any).transaction(exec)();
+  } else {
+    return (db as any).transaction(exec)();
+  }
 }

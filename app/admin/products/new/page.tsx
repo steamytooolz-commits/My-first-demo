@@ -5,7 +5,7 @@ import { adminSaveProductAction } from '@/app/actions/admin';
 import { ArrowLeft } from 'lucide-react';
 
 export default async function AdminNewProductPage() {
-  const categories = db.prepare('SELECT id, name FROM categories WHERE active = 1 ORDER BY name ASC').all() as any[];
+  const categories = await db.prepare('SELECT id, name FROM categories WHERE active = 1 ORDER BY name ASC').all() as any[];
 
   return (
     <div className="max-w-3xl space-y-6">

@@ -4,7 +4,7 @@ import { getStoreSettings } from '@/lib/settings';
 import { formatZar } from '@/lib/money';
 
 export default function ShippingPage() {
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">

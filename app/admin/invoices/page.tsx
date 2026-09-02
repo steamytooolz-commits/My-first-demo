@@ -4,7 +4,7 @@ import { formatZar } from '@/lib/money';
 import { Download, FileText, Eye } from 'lucide-react';
 
 export default async function AdminInvoicesPage() {
-  const invoices = db.prepare(`
+  const invoices = await db.prepare(`
     SELECT i.*, o.order_number, o.email as customer_email
     FROM invoices i
     JOIN orders o ON i.order_id = o.id

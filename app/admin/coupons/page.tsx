@@ -4,7 +4,7 @@ import { adminSaveCouponAction, adminDeleteCouponAction } from '@/app/actions/ad
 import { Tag, Plus, Trash2 } from 'lucide-react';
 
 export default async function AdminCouponsPage() {
-  const coupons = db.prepare('SELECT * FROM coupons ORDER BY created_at DESC').all() as any[];
+  const coupons = await db.prepare('SELECT * FROM coupons ORDER BY created_at DESC').all() as any[];
 
   return (
     <div className="space-y-8 max-w-5xl">

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { db } from './db';
+import { db, isPg } from './db';
 import { User } from './auth';
 import { getStoreSettings } from './settings';
 import { nextSequence } from './sequences';
@@ -23,10 +23,9 @@ export interface CheckoutResult {
   error?: string;
 }
 
-export function executeCheckout(user: User, input: CheckoutInput): CheckoutResult {
-  // 1. Rate-limit check
+export async function executeCheckout(user: User, input: CheckoutInput): Promise<CheckoutResult> {
   const rateLimitKey = `checkout:${user.id}:${input.ip || 'local'}`;
-  const rateCheck = checkRateLimit(rateLimitKey, 10, 15 * 60 * 1000);
+  const rateCheck = await checkRateLimit(rateLimitKey, 10, 15 * 60 * 1000);
   if (!rateCheck.allowed) {
     return {
       success: false,
@@ -34,10 +33,8 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
     };
   }
 
-  // Execute inside SQLite transaction
-  return db.transaction(() => {
-    // 2. Load active cart
-    const cart = db.prepare(`
+  const exec = async () => {
+    const cart = await db.prepare(`
       SELECT * FROM carts WHERE user_id = ? AND status = 'active'
     `).get(user.id) as any;
 
@@ -45,8 +42,7 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       return { success: false, error: 'No active cart found' };
     }
 
-    // 3. Load cart items with current variants and products
-    const cartItems = db.prepare(`
+    const cartItems = await db.prepare(`
       SELECT 
         ci.id as cart_item_id,
         ci.variant_id,
@@ -71,7 +67,6 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       return { success: false, error: 'Your cart is empty' };
     }
 
-    // 4. Validate variants and stock
     let subtotalCents = 0;
     let totalWeightG = 0;
 
@@ -92,8 +87,7 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       totalWeightG += (item.weight_g || 0) * item.qty;
     }
 
-    // 5. Validate shipping address
-    const address = db.prepare(`
+    const address = await db.prepare(`
       SELECT * FROM addresses WHERE id = ? AND user_id = ?
     `).get(input.addressId, user.id) as any;
 
@@ -101,15 +95,14 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       return { success: false, error: 'Please select a valid shipping address' };
     }
 
-    const settings = getStoreSettings();
+    const settings = await getStoreSettings();
 
-    // 6. Validate and calculate coupon
     let couponDiscountCents = 0;
     let isFreeShippingCoupon = false;
     let appliedCoupon: any = null;
 
     if (cart.coupon_code) {
-      const coupon = db.prepare(`
+      const coupon = await db.prepare(`
         SELECT * FROM coupons WHERE code = ? COLLATE NOCASE
       `).get(cart.coupon_code) as any;
 
@@ -122,7 +115,7 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       else if (subtotalCents < coupon.min_subtotal_cents) valid = false;
       else if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit) valid = false;
       else if (coupon.one_per_customer) {
-        const redemption = db.prepare(`
+        const redemption = await db.prepare(`
           SELECT id FROM coupon_redemptions WHERE coupon_id = ? AND user_id = ?
         `).get(coupon.id, user.id);
         if (redemption) valid = false;
@@ -144,7 +137,6 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       }
     }
 
-    // 7. Calculate shipping
     let shippingCents = 0;
     const netSubtotal = Math.max(0, subtotalCents - couponDiscountCents);
 
@@ -168,10 +160,8 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       }
     }
 
-    // 8. Order total
     const totalCents = subtotalCents - couponDiscountCents + shippingCents;
 
-    // 9. Tax calculation & allocation
     const preparedLineItems = cartItems.map(item => ({
       ...item,
       line_subtotal_cents: item.price_cents * item.qty,
@@ -191,11 +181,9 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       settings.shipping_taxable
     );
 
-    // 10. Generate order number
-    const orderNumber = nextSequence('order', settings.order_prefix || 'ORD');
+    const orderNumber = await nextSequence('order', settings.order_prefix || 'ORD');
     const orderId = crypto.randomUUID();
 
-    // 11. Determine statuses based on payment method
     let orderStatus: 'pending_payment' | 'paid' | 'processing' = 'pending_payment';
     let paymentStatus: 'pending' | 'success' | 'failed' = 'pending';
     let invoiceStatus: 'issued' | 'paid' = 'issued';
@@ -240,8 +228,7 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       country: address.country,
     });
 
-    // 12. Insert order
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO orders (
         id, order_number, user_id, email, status, currency,
         subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
@@ -266,12 +253,11 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       totalCents,
       input.shippingMethod,
       shippingAddressJson,
-      shippingAddressJson, // same as shipping
+      shippingAddressJson,
       appliedCoupon ? appliedCoupon.code : null,
       input.customerNote || null
     );
 
-    // 13. Insert order items, decrement stock, and record stock movements
     const invoiceItems: InvoiceLineItem[] = [];
 
     for (const item of taxResult.items) {
@@ -284,7 +270,7 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
         variant_id: item.variant_id,
       });
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO order_items (
           id, order_id, variant_id, variant_snapshot_json,
           qty, unit_price_cents, line_subtotal_cents, line_discount_cents,
@@ -303,15 +289,13 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
         item.tax_cents
       );
 
-      // Decrement stock
-      db.prepare(`
+      await db.prepare(`
         UPDATE product_variants
         SET stock_qty = stock_qty - ?, updated_at = datetime('now')
         WHERE id = ?
       `).run(item.qty, item.variant_id);
 
-      // Record stock movement
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO stock_movements (id, variant_id, delta, reason, order_id, note, created_at)
         VALUES (?, ?, ?, 'order', ?, ?, datetime('now'))
       `).run(
@@ -334,31 +318,28 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       });
     }
 
-    // 14. Increment coupon count and create redemption
     if (appliedCoupon) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE coupons SET used_count = used_count + 1 WHERE id = ?
       `).run(appliedCoupon.id);
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO coupon_redemptions (id, coupon_id, user_id, order_id, created_at)
         VALUES (?, ?, ?, ?, datetime('now'))
       `).run(crypto.randomUUID(), appliedCoupon.id, user.id, orderId);
     }
 
-    // 15. Create order event
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO order_events (id, order_id, actor_id, type, note, created_at)
       VALUES (?, ?, ?, 'order_placed', ?, datetime('now'))
     `).run(crypto.randomUUID(), orderId, user.id, `Order placed with ${input.paymentMethod}`);
 
-    // 16. Create payment record
     const paymentId = crypto.randomUUID();
     const gatewayRef = input.paymentMethod === 'sim_card'
       ? `sim_${crypto.randomBytes(8).toString('hex')}`
       : null;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO payments (
         id, order_id, method, status, amount_cents, gateway_ref, simulated_result_json, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -372,7 +353,6 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       JSON.stringify({ outcome: simOutcome, note: 'Simulated payment processing' })
     );
 
-    // 17. Create invoice
     const buyer: InvoiceBuyer = {
       name: address.full_name,
       email: user.email,
@@ -385,7 +365,7 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       country: address.country,
     };
 
-    createInvoiceForOrder(
+    await createInvoiceForOrder(
       {
         id: orderId,
         order_number: orderNumber,
@@ -401,12 +381,11 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       invoiceStatus,
       invoiceAmountPaid,
       input.paymentMethod === 'manual_eft'
-        ? settings.bank_reference_note
+        ? (await getStoreSettings()).bank_reference_note
         : ''
     );
 
-    // 18. Mark cart converted
-    db.prepare(`
+    await db.prepare(`
       UPDATE carts SET status = 'converted', updated_at = datetime('now') WHERE id = ?
     `).run(cart.id);
 
@@ -415,19 +394,25 @@ export function executeCheckout(user: User, input: CheckoutInput): CheckoutResul
       orderId,
       orderNumber,
     };
-  })();
+  };
+
+  if (isPg) {
+    return await (db as any).transaction(exec)();
+  } else {
+    return (db as any).transaction(exec)();
+  }
 }
 
 /**
  * Retry payment for an existing pending_payment order
  */
-export function retryOrderPayment(
+export async function retryOrderPayment(
   orderId: string,
   userId: string,
   outcome: 'success' | 'declined' | 'pending'
-): { success: boolean; error?: string } {
-  return db.transaction(() => {
-    const order = db.prepare(`
+): Promise<{ success: boolean; error?: string }> {
+  const exec = async () => {
+    const order = await db.prepare(`
       SELECT * FROM orders WHERE id = ? AND user_id = ?
     `).get(orderId, userId) as any;
 
@@ -440,7 +425,7 @@ export function retryOrderPayment(
     const gatewayRef = `sim_${crypto.randomBytes(8).toString('hex')}`;
     const paymentStatus = outcome === 'success' ? 'success' : outcome === 'declined' ? 'failed' : 'pending';
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO payments (
         id, order_id, method, status, amount_cents, gateway_ref, simulated_result_json, created_at
       ) VALUES (?, ?, 'sim_card', ?, ?, ?, ?, datetime('now'))
@@ -454,27 +439,33 @@ export function retryOrderPayment(
     );
 
     if (outcome === 'success') {
-      db.prepare(`
+      await db.prepare(`
         UPDATE orders SET status = 'paid', updated_at = datetime('now') WHERE id = ?
       `).run(orderId);
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE invoices
         SET status = 'paid', amount_paid_cents = total_cents, updated_at = datetime('now')
         WHERE order_id = ?
       `).run(orderId);
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO order_events (id, order_id, actor_id, type, note, created_at)
         VALUES (?, ?, ?, 'payment_received', 'Simulated payment retry succeeded', datetime('now'))
       `).run(crypto.randomUUID(), orderId, userId);
     } else {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO order_events (id, order_id, actor_id, type, note, created_at)
         VALUES (?, ?, ?, 'payment_failed', 'Simulated payment retry failed', datetime('now'))
       `).run(crypto.randomUUID(), orderId, userId);
     }
 
     return { success: true };
-  })();
+  };
+
+  if (isPg) {
+    return await (db as any).transaction(exec)();
+  } else {
+    return (db as any).transaction(exec)();
+  }
 }

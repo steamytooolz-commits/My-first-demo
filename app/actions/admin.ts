@@ -40,14 +40,14 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
   const p = parsed.data;
 
   // Slug collision check
-  const slugCheck = db.prepare('SELECT id FROM products WHERE slug = ? AND id != ?').get(p.slug, id);
+  const slugCheck = await db.prepare('SELECT id FROM products WHERE slug = ? AND id != ?').get(p.slug, id);
   if (slugCheck) {
     return { success: false, error: 'A product with this URL slug already exists.' };
   }
 
-  db.transaction(() => {
+  await db.transaction(async () => {
     if (id) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE products
         SET category_id = ?, name = ?, slug = ?, description = ?, brand = ?,
             active = ?, featured = ?, updated_at = datetime('now')
@@ -55,30 +55,30 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
       `).run(p.category_id, p.name, p.slug, p.description, p.brand, p.active ? 1 : 0, p.featured ? 1 : 0, id);
 
       if (imageUrl) {
-        db.prepare('DELETE FROM product_images WHERE product_id = ?').run(id);
-        db.prepare(`
+        await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(id);
+        await db.prepare(`
           INSERT INTO product_images (id, product_id, url, alt, position)
           VALUES (?, ?, ?, ?, 0)
         `).run(crypto.randomUUID(), id, imageUrl, p.name);
       }
 
-      logAudit(admin.id, 'update_product', 'product', id, p);
+      await logAudit(admin.id, 'update_product', 'product', id, p);
     } else {
       const newId = crypto.randomUUID();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO products (
           id, category_id, name, slug, description, brand, active, featured, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `).run(newId, p.category_id, p.name, p.slug, p.description, p.brand, p.active ? 1 : 0, p.featured ? 1 : 0);
 
       if (imageUrl) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO product_images (id, product_id, url, alt, position)
           VALUES (?, ?, ?, ?, 0)
         `).run(crypto.randomUUID(), newId, imageUrl, p.name);
       }
 
-      logAudit(admin.id, 'create_product', 'product', newId, p);
+      await logAudit(admin.id, 'create_product', 'product', newId, p);
     }
   })();
 
@@ -89,8 +89,8 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
 
 export async function adminDeleteProductAction(productId: string): Promise<AdminActionResponse> {
   const admin = await requireAdmin();
-  db.prepare('DELETE FROM products WHERE id = ?').run(productId);
-  logAudit(admin.id, 'delete_product', 'product', productId);
+  await db.prepare('DELETE FROM products WHERE id = ?').run(productId);
+  await logAudit(admin.id, 'delete_product', 'product', productId);
   revalidatePath('/admin/products');
   revalidatePath('/catalog');
   return { success: true };
@@ -129,17 +129,17 @@ export async function adminSaveVariantAction(prevState: any, formData: FormData)
   const v = parsed.data;
 
   // SKU unique check
-  const skuCheck = db.prepare('SELECT id FROM product_variants WHERE sku = ? AND id != ?').get(v.sku, id);
+  const skuCheck = await db.prepare('SELECT id FROM product_variants WHERE sku = ? AND id != ?').get(v.sku, id);
   if (skuCheck) {
     return { success: false, error: `SKU "${v.sku}" is already assigned to another variant.` };
   }
 
-  db.transaction(() => {
+  await db.transaction(async () => {
     if (id) {
-      const oldVariant = db.prepare('SELECT stock_qty FROM product_variants WHERE id = ?').get(id) as any;
+      const oldVariant = await db.prepare('SELECT stock_qty FROM product_variants WHERE id = ?').get(id) as any;
       const stockDiff = v.stock_qty - (oldVariant?.stock_qty || 0);
 
-      db.prepare(`
+      await db.prepare(`
         UPDATE product_variants
         SET sku = ?, name = ?, options_json = ?, price_cents = ?,
             compare_at_price_cents = ?, cost_cents = ?, stock_qty = ?,
@@ -152,16 +152,16 @@ export async function adminSaveVariantAction(prevState: any, formData: FormData)
       );
 
       if (stockDiff !== 0) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO stock_movements (id, variant_id, delta, reason, note, created_at)
           VALUES (?, ?, ?, 'admin_adjustment', 'Admin variant update', datetime('now'))
         `).run(crypto.randomUUID(), id, stockDiff);
       }
 
-      logAudit(admin.id, 'update_variant', 'product_variant', id, v);
+      await logAudit(admin.id, 'update_variant', 'product_variant', id, v);
     } else {
       const newId = crypto.randomUUID();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO product_variants (
           id, product_id, sku, name, options_json, price_cents, compare_at_price_cents,
           cost_cents, stock_qty, low_stock_threshold, weight_g, barcode, active, created_at, updated_at
@@ -174,12 +174,12 @@ export async function adminSaveVariantAction(prevState: any, formData: FormData)
         v.low_stock_threshold, v.weight_g, v.barcode, v.active ? 1 : 0
       );
 
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO stock_movements (id, variant_id, delta, reason, note, created_at)
         VALUES (?, ?, ?, 'admin_adjustment', 'Initial variant stock creation', datetime('now'))
       `).run(crypto.randomUUID(), newId, v.stock_qty);
 
-      logAudit(admin.id, 'create_variant', 'product_variant', newId, v);
+      await logAudit(admin.id, 'create_variant', 'product_variant', newId, v);
     }
   })();
 
@@ -198,7 +198,7 @@ export async function adminAdjustStockAction(prevState: any, formData: FormData)
     return { success: false, error: 'Valid variant and non-zero adjustment delta are required' };
   }
 
-  const variant = db.prepare('SELECT id, stock_qty, product_id FROM product_variants WHERE id = ?').get(variantId) as any;
+  const variant = await db.prepare('SELECT id, stock_qty, product_id FROM product_variants WHERE id = ?').get(variantId) as any;
   if (!variant) return { success: false, error: 'Variant not found' };
 
   const newStock = variant.stock_qty + delta;
@@ -206,17 +206,17 @@ export async function adminAdjustStockAction(prevState: any, formData: FormData)
     return { success: false, error: `Stock cannot be negative. Current stock is ${variant.stock_qty}` };
   }
 
-  db.transaction(() => {
-    db.prepare(`
+  await db.transaction(async () => {
+    await db.prepare(`
       UPDATE product_variants SET stock_qty = ?, updated_at = datetime('now') WHERE id = ?
     `).run(newStock, variantId);
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO stock_movements (id, variant_id, delta, reason, note, created_at)
       VALUES (?, ?, ?, 'admin_adjustment', ?, datetime('now'))
     `).run(crypto.randomUUID(), variantId, delta, note);
 
-    logAudit(admin.id, 'adjust_stock', 'product_variant', variantId, { delta, newStock, note });
+    await logAudit(admin.id, 'adjust_stock', 'product_variant', variantId, { delta, newStock, note });
   })();
 
   revalidatePath('/admin/products');
@@ -247,25 +247,25 @@ export async function adminSaveCategoryAction(prevState: any, formData: FormData
   const c = parsed.data;
 
   // Slug check
-  const slugCheck = db.prepare('SELECT id FROM categories WHERE slug = ? AND id != ?').get(c.slug, id);
+  const slugCheck = await db.prepare('SELECT id FROM categories WHERE slug = ? AND id != ?').get(c.slug, id);
   if (slugCheck) {
     return { success: false, error: 'A category with this slug already exists.' };
   }
 
   if (id) {
-    db.prepare(`
+    await db.prepare(`
       UPDATE categories
       SET name = ?, slug = ?, description = ?, parent_id = ?, active = ?, sort_order = ?
       WHERE id = ?
     `).run(c.name, c.slug, c.description, c.parent_id, c.active ? 1 : 0, c.sort_order, id);
-    logAudit(admin.id, 'update_category', 'category', id, c);
+    await logAudit(admin.id, 'update_category', 'category', id, c);
   } else {
     const newId = crypto.randomUUID();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO categories (id, name, slug, description, parent_id, active, sort_order)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(newId, c.name, c.slug, c.description, c.parent_id, c.active ? 1 : 0, c.sort_order);
-    logAudit(admin.id, 'create_category', 'category', newId, c);
+    await logAudit(admin.id, 'create_category', 'category', newId, c);
   }
 
   revalidatePath('/admin/categories');
@@ -275,8 +275,8 @@ export async function adminSaveCategoryAction(prevState: any, formData: FormData
 
 export async function adminDeleteCategoryAction(categoryId: string): Promise<AdminActionResponse> {
   const admin = await requireAdmin();
-  db.prepare('DELETE FROM categories WHERE id = ?').run(categoryId);
-  logAudit(admin.id, 'delete_category', 'category', categoryId);
+  await db.prepare('DELETE FROM categories WHERE id = ?').run(categoryId);
+  await logAudit(admin.id, 'delete_category', 'category', categoryId);
   revalidatePath('/admin/categories');
   revalidatePath('/catalog');
   return { success: true };
@@ -297,20 +297,20 @@ export async function adminUpdateOrderStatusAction(
     return { success: false, error: 'Invalid order status' };
   }
 
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+  const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
   if (!order) return { success: false, error: 'Order not found' };
 
-  db.transaction(() => {
+  await db.transaction(async () => {
     // If transitioning to cancelled/refunded, restore inventory
     if ((newStatus === 'cancelled' || newStatus === 'refunded') && order.status !== 'cancelled' && order.status !== 'refunded') {
-      const items = db.prepare('SELECT variant_id, qty FROM order_items WHERE order_id = ?').all(orderId) as any[];
+      const items = await db.prepare('SELECT variant_id, qty FROM order_items WHERE order_id = ?').all(orderId) as any[];
       for (const item of items) {
         if (item.variant_id) {
-          db.prepare(`
+          await db.prepare(`
             UPDATE product_variants SET stock_qty = stock_qty + ?, updated_at = datetime('now') WHERE id = ?
           `).run(item.qty, item.variant_id);
 
-          db.prepare(`
+          await db.prepare(`
             INSERT INTO stock_movements (id, variant_id, delta, reason, order_id, note, created_at)
             VALUES (?, ?, ?, 'order_cancelled', ?, 'Stock restored from order cancellation', datetime('now'))
           `).run(crypto.randomUUID(), item.variant_id, item.qty, orderId);
@@ -318,31 +318,31 @@ export async function adminUpdateOrderStatusAction(
       }
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?
     `).run(newStatus, orderId);
 
     // Update invoice status accordingly
     if (newStatus === 'paid') {
-      db.prepare(`
+      await db.prepare(`
         UPDATE invoices SET status = 'paid', amount_paid_cents = total_cents, updated_at = datetime('now') WHERE order_id = ?
       `).run(orderId);
     } else if (newStatus === 'cancelled') {
-      db.prepare(`
+      await db.prepare(`
         UPDATE invoices SET status = 'void', updated_at = datetime('now') WHERE order_id = ?
       `).run(orderId);
     } else if (newStatus === 'refunded') {
-      db.prepare(`
+      await db.prepare(`
         UPDATE invoices SET status = 'refunded', updated_at = datetime('now') WHERE order_id = ?
       `).run(orderId);
     }
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO order_events (id, order_id, actor_id, type, note, created_at)
       VALUES (?, ?, ?, 'status_change', ?, datetime('now'))
     `).run(crypto.randomUUID(), orderId, admin.id, `Status updated to ${newStatus}. ${note}`);
 
-    logAudit(admin.id, 'update_order_status', 'order', orderId, { oldStatus: order.status, newStatus, note });
+    await logAudit(admin.id, 'update_order_status', 'order', orderId, { oldStatus: order.status, newStatus, note });
   })();
 
   revalidatePath(`/admin/orders/${orderId}`);
@@ -390,13 +390,13 @@ export async function adminSaveCouponAction(prevState: any, formData: FormData):
   const c = parsed.data;
 
   // Code uniqueness
-  const codeCheck = db.prepare('SELECT id FROM coupons WHERE code = ? COLLATE NOCASE AND id != ?').get(c.code, id);
+  const codeCheck = await db.prepare('SELECT id FROM coupons WHERE code = ? COLLATE NOCASE AND id != ?').get(c.code, id);
   if (codeCheck) {
     return { success: false, error: `Coupon code "${c.code}" already exists.` };
   }
 
   if (id) {
-    db.prepare(`
+    await db.prepare(`
       UPDATE coupons
       SET code = ?, type = ?, value = ?, min_subtotal_cents = ?, max_discount_cents = ?,
           usage_limit = ?, one_per_customer = ?, active = ?, starts_at = ?, expires_at = ?
@@ -405,10 +405,10 @@ export async function adminSaveCouponAction(prevState: any, formData: FormData):
       c.code, c.type, c.value, c.min_subtotal_cents, c.max_discount_cents,
       c.usage_limit, c.one_per_customer ? 1 : 0, c.active ? 1 : 0, c.starts_at, c.expires_at, id
     );
-    logAudit(admin.id, 'update_coupon', 'coupon', id, c);
+    await logAudit(admin.id, 'update_coupon', 'coupon', id, c);
   } else {
     const newId = crypto.randomUUID();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO coupons (
         id, code, type, value, min_subtotal_cents, max_discount_cents,
         usage_limit, used_count, one_per_customer, active, starts_at, expires_at, created_at
@@ -420,7 +420,7 @@ export async function adminSaveCouponAction(prevState: any, formData: FormData):
       newId, c.code, c.type, c.value, c.min_subtotal_cents, c.max_discount_cents,
       c.usage_limit, c.one_per_customer ? 1 : 0, c.active ? 1 : 0, c.starts_at, c.expires_at
     );
-    logAudit(admin.id, 'create_coupon', 'coupon', newId, c);
+    await logAudit(admin.id, 'create_coupon', 'coupon', newId, c);
   }
 
   revalidatePath('/admin/coupons');
@@ -429,16 +429,16 @@ export async function adminSaveCouponAction(prevState: any, formData: FormData):
 
 export async function adminToggleCouponAction(couponId: string): Promise<AdminActionResponse> {
   const admin = await requireAdmin();
-  db.prepare('UPDATE coupons SET active = 1 - active WHERE id = ?').run(couponId);
-  logAudit(admin.id, 'toggle_coupon', 'coupon', couponId);
+  await db.prepare('UPDATE coupons SET active = 1 - active WHERE id = ?').run(couponId);
+  await logAudit(admin.id, 'toggle_coupon', 'coupon', couponId);
   revalidatePath('/admin/coupons');
   return { success: true };
 }
 
 export async function adminDeleteCouponAction(couponId: string): Promise<AdminActionResponse> {
   const admin = await requireAdmin();
-  db.prepare('DELETE FROM coupons WHERE id = ?').run(couponId);
-  logAudit(admin.id, 'delete_coupon', 'coupon', couponId);
+  await db.prepare('DELETE FROM coupons WHERE id = ?').run(couponId);
+  await logAudit(admin.id, 'delete_coupon', 'coupon', couponId);
   revalidatePath('/admin/coupons');
   return { success: true };
 }
@@ -480,8 +480,8 @@ export async function adminSaveSettingsAction(prevState: any, formData: FormData
   };
 
   try {
-    updateStoreSettings(settingsPayload);
-    logAudit(admin.id, 'update_settings', 'settings', 'store', settingsPayload);
+    await updateStoreSettings(settingsPayload);
+    await logAudit(admin.id, 'update_settings', 'settings', 'store', settingsPayload);
     revalidatePath('/admin/settings');
     revalidatePath('/', 'layout');
     return { success: true };
@@ -495,7 +495,7 @@ export async function adminSaveSettingsAction(prevState: any, formData: FormData
 // -------------------------------------------------------------
 export async function adminProcessErasureAction(requestId: string): Promise<AdminActionResponse> {
   const admin = await requireAdmin();
-  const ok = processErasure(requestId, admin.id);
+  const ok = await processErasure(requestId, admin.id);
   if (!ok) return { success: false, error: 'Could not process erasure request' };
 
   revalidatePath('/admin/customers');
@@ -506,14 +506,14 @@ export const adminExecuteErasureAction = adminProcessErasureAction;
 
 export async function adminToggleUserStatusAction(userId: string): Promise<AdminActionResponse> {
   const admin = await requireAdmin();
-  db.prepare(`
+  await db.prepare(`
     UPDATE users
     SET status = CASE WHEN status = 'active' THEN 'disabled' ELSE 'active' END,
         updated_at = datetime('now')
     WHERE id = ? AND role != 'admin'
   `).run(userId);
 
-  logAudit(admin.id, 'toggle_user_status', 'user', userId);
+  await logAudit(admin.id, 'toggle_user_status', 'user', userId);
   revalidatePath('/admin/customers');
   return { success: true };
 }

@@ -5,7 +5,7 @@ import { getStoreSettings } from '@/lib/settings';
 import { Mail, Phone, MapPin, Clock } from 'lucide-react';
 
 export default function ContactPage() {
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">

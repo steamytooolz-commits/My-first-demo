@@ -16,7 +16,7 @@ interface ProductPageProps {
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
 
-  const product = db.prepare(`
+  const product = await db.prepare(`
     SELECT p.*, c.name as category_name, c.slug as category_slug
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
@@ -27,11 +27,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
 
-  const images = db.prepare(`
+  const images = await db.prepare(`
     SELECT url, alt FROM product_images WHERE product_id = ? ORDER BY position ASC
   `).all(product.id) as any[];
 
-  const variants = db.prepare(`
+  const variants = await db.prepare(`
     SELECT id, sku, name, price_cents, compare_at_price_cents, stock_qty, low_stock_threshold, weight_g, options_json
     FROM product_variants
     WHERE product_id = ? AND active = 1

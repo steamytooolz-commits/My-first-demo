@@ -7,15 +7,15 @@ interface RateLimitRecord {
 
 const memoryStore = new Map<string, RateLimitRecord>();
 
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   limit: number,
   windowMs: number
-): { allowed: boolean; retryAfterSeconds: number } {
+): Promise<{ allowed: boolean; retryAfterSeconds: number }> {
   // On Vercel, memoryStore is per-lambda (not shared) — fallback to DB for persistence across instances
   if (process.env.VERCEL) {
     try {
-      db.exec(`
+      await db.exec(`
         CREATE TABLE IF NOT EXISTS rate_limits (
           key TEXT PRIMARY KEY,
           count INTEGER NOT NULL,
@@ -23,16 +23,16 @@ export function checkRateLimit(
         )
       `);
       const now = Date.now();
-      const row = db.prepare('SELECT count, reset_at as resetAt FROM rate_limits WHERE key = ?').get(key) as any;
+      const row = await db.prepare('SELECT count, reset_at as resetAt FROM rate_limits WHERE key = ?').get(key) as any;
       if (!row || now > row.resetAt) {
-        db.prepare('INSERT OR REPLACE INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)').run(key, now + windowMs);
+        await db.prepare('INSERT OR REPLACE INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)').run(key, now + windowMs);
         return { allowed: true, retryAfterSeconds: 0 };
       }
       if (row.count >= limit) {
         const retryAfterSeconds = Math.max(1, Math.ceil((row.resetAt - now) / 1000));
         return { allowed: false, retryAfterSeconds };
       }
-      db.prepare('UPDATE rate_limits SET count = count + 1 WHERE key = ?').run(key);
+      await db.prepare('UPDATE rate_limits SET count = count + 1 WHERE key = ?').run(key);
       return { allowed: true, retryAfterSeconds: 0 };
     } catch {
       // Fallback to memory if DB fails (e.g., during build)
@@ -60,13 +60,13 @@ export function checkRateLimit(
  * Check login attempts from SQLite login_attempts table as specified in Section 12:
  * "If 5 failed attempts for the same email and IP within 15 minutes, block login for 15 minutes"
  */
-export function checkLoginThrottle(
+export async function checkLoginThrottle(
   email: string,
   ip: string
-): { allowed: boolean; remainingAttempts: number } {
+): Promise<{ allowed: boolean; remainingAttempts: number }> {
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-  const row = db.prepare(`
+  const row = await db.prepare(`
     SELECT COUNT(*) as failed_count
     FROM login_attempts
     WHERE email = ? COLLATE NOCASE
@@ -84,17 +84,17 @@ export function checkLoginThrottle(
   };
 }
 
-export function recordLoginAttempt(email: string, ip: string, success: boolean): void {
+export async function recordLoginAttempt(email: string, ip: string, success: boolean): Promise<void> {
   const id = crypto.randomUUID();
   const normalizedEmail = email.trim().toLowerCase();
 
   if (success) {
-    db.prepare(`
+    await db.prepare(`
       DELETE FROM login_attempts WHERE email = ? COLLATE NOCASE AND ip = ? AND success = 0
     `).run(normalizedEmail, ip);
   }
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO login_attempts (id, email, ip, success, created_at)
     VALUES (?, ?, ?, ?, datetime('now'))
   `).run(id, normalizedEmail, ip, success ? 1 : 0);

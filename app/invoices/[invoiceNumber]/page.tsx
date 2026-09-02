@@ -16,9 +16,9 @@ interface InvoicePageProps {
 export default async function InvoicePage({ params }: InvoicePageProps) {
   const { invoiceNumber } = await params;
   const user = await getSessionUser();
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
-  const invoice = db.prepare(`
+  const invoice = await db.prepare(`
     SELECT i.*, o.order_number, o.user_id, o.shipping_address_json, o.billing_address_json,
            o.customer_note, o.coupon_code, o.shipping_method
     FROM invoices i

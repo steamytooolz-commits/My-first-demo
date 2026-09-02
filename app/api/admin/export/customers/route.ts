@@ -9,7 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const customers = db.prepare(`
+  const customers = await db.prepare(`
     SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status,
            u.poia_processing_consent_at, u.marketing_consent, u.created_at,
            (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count

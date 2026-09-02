@@ -30,13 +30,13 @@ export async function saveAddressAction(prevState: any, formData: FormData): Pro
 
   const data = parsed.data;
 
-  db.transaction(() => {
+  await db.transaction(async () => {
     if (data.is_default) {
-      db.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').run(user.id);
+      await db.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').run(user.id);
     }
 
     if (id) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE addresses
         SET label = ?, full_name = ?, phone = ?, line1 = ?, line2 = ?,
             city = ?, province = ?, postal_code = ?, country = ?, is_default = ?
@@ -48,7 +48,7 @@ export async function saveAddressAction(prevState: any, formData: FormData): Pro
       );
     } else {
       const addressId = crypto.randomUUID();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO addresses (
           id, user_id, label, full_name, phone, line1, line2,
           city, province, postal_code, country, is_default
@@ -67,7 +67,7 @@ export async function saveAddressAction(prevState: any, formData: FormData): Pro
 
 export async function deleteAddressAction(addressId: string): Promise<{ success: boolean }> {
   const user = await requireUser();
-  db.prepare('DELETE FROM addresses WHERE id = ? AND user_id = ?').run(addressId, user.id);
+  await db.prepare('DELETE FROM addresses WHERE id = ? AND user_id = ?').run(addressId, user.id);
   revalidatePath('/account/addresses');
   revalidatePath('/checkout');
   return { success: true };
@@ -75,9 +75,9 @@ export async function deleteAddressAction(addressId: string): Promise<{ success:
 
 export async function setDefaultAddressAction(addressId: string): Promise<{ success: boolean }> {
   const user = await requireUser();
-  db.transaction(() => {
-    db.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').run(user.id);
-    db.prepare('UPDATE addresses SET is_default = 1 WHERE id = ? AND user_id = ?').run(addressId, user.id);
+  await db.transaction(async () => {
+    await db.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').run(user.id);
+    await db.prepare('UPDATE addresses SET is_default = 1 WHERE id = ? AND user_id = ?').run(addressId, user.id);
   })();
   revalidatePath('/account/addresses');
   revalidatePath('/checkout');

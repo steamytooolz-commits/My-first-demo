@@ -507,7 +507,7 @@ if (isPg && pgPool) {
     globalForDb.pgPool = pgPool;
   }
   // Wrap to handle both sync and async callers: we keep pgWrapper as is
-  // But to avoid breaking existing `db.prepare(...).get()` sync calls, we make them async and require await.
+  // But to avoid breaking existing `await db.prepare(...).get()` sync calls, we make them async and require await.
   // Existing code after this patch will be updated to `await db.prepare(...).get()`.
   db = pgWrapper;
   console.log('[db] Postgres mode — set DATABASE_URL to use free tier (Neon/Vercel). All queries are async (await required).');
@@ -532,13 +532,26 @@ if (isPg && pgPool) {
     prepare: (sql: string) => {
       const stmt: any = sqliteDb.prepare(sql);
       return {
-        get: (...params: any[]) => stmt.get(...params),
-        all: (...params: any[]) => stmt.all(...params),
-        run: (...params: any[]) => stmt.run(...params),
+        get: async (...params: any[]) => stmt.get(...params),
+        all: async (...params: any[]) => stmt.all(...params),
+        run: async (...params: any[]) => stmt.run(...params),
       };
     },
-    exec: (sql: string) => sqliteDb.exec(sql),
-    transaction: (fn: any) => sqliteDb.transaction(fn),
+    exec: async (sql: string) => sqliteDb.exec(sql),
+    transaction: (fn: any) => {
+      // Support both sync and async transaction callbacks
+      return async (...args: any[]) => {
+        try {
+          sqliteDb.exec('BEGIN');
+          const result = await fn(...args);
+          sqliteDb.exec('COMMIT');
+          return result;
+        } catch (e) {
+          try { sqliteDb.exec('ROLLBACK'); } catch {}
+          throw e;
+        }
+      };
+    },
     pragma: (s: string) => sqliteDb.pragma(s),
     _raw: sqliteDb,
   };
@@ -598,15 +611,21 @@ function ensureDefaultSeed(database: Database.Database) {
 
     const adminEmail = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
-    const adminId = crypto.randomUUID();
+    // Use deterministic UUIDs so JWT sub remains valid across ephemeral /tmp resets (fixes 3-click login)
+    const adminId = '00000000-0000-4000-a000-000000000001';
     const now = new Date().toISOString();
 
     try {
       database.prepare(`
         INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at)
         VALUES (?, ?, ?, 'System Administrator', '', 'admin', 'active', 0, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
       `).run(adminId, adminEmail, hashPasswordForSeed(adminPassword), now, now, now);
-      console.log(`[db] Seeded admin: ${adminEmail}`);
+      // If admin already exists with different email (e.g., env change), ensure password is updated to env value
+      try {
+        database.prepare(`UPDATE users SET password_hash = ?, email = ?, updated_at = ? WHERE id = ?`).run(hashPasswordForSeed(adminPassword), adminEmail, now, adminId);
+      } catch {}
+      console.log(`[db] Seeded admin: ${adminEmail} (deterministic id)`);
     } catch (e) {
       console.warn('[db] Admin seed skipped:', (e as Error).message);
     }
@@ -614,7 +633,7 @@ function ensureDefaultSeed(database: Database.Database) {
     if (process.env.SEED_DEMO !== 'false') {
       const demoEmail = 'customer@example.com';
       const demoPassword = 'Customer123!';
-      const demoId = crypto.randomUUID();
+      const demoId = '00000000-0000-4000-a000-000000000002';
       try {
         database.prepare(`
           INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at)

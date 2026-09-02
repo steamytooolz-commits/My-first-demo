@@ -30,7 +30,7 @@ export default async function AdminAuditPage({ searchParams }: AdminAuditPagePro
 
   query += ` ORDER BY al.created_at DESC LIMIT 100`;
 
-  const logs = db.prepare(query).all(...params) as any[];
+  const logs = await db.prepare(query).all(...params) as any[];
 
   return (
     <div className="space-y-6 max-w-5xl">

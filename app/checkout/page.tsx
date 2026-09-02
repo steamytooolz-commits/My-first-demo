@@ -9,11 +9,11 @@ import { db } from '@/lib/db';
 export default async function CheckoutPage() {
   const user = await getSessionUser();
   const cart = await getCartSummary();
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
   let savedAddresses: any[] = [];
   if (user) {
-    savedAddresses = db.prepare(`
+    savedAddresses = await db.prepare(`
       SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, rowid DESC
     `).all(user.id);
   }

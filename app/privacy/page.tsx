@@ -3,7 +3,7 @@ import Footer from '@/components/Footer';
 import { getStoreSettings } from '@/lib/settings';
 
 export default function PrivacyPage() {
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">

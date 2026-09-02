@@ -30,7 +30,7 @@ export async function placeOrderAction(prevState: any, formData: FormData): Prom
   const headersList = await headers();
   const ip = headersList.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
 
-  const result = executeCheckout(user, {
+  const result = await executeCheckout(user, {
     addressId,
     shippingMethod,
     paymentMethod,
@@ -57,7 +57,7 @@ export async function retryPaymentAction(orderId: string, outcome: 'success' | '
   const user = await getSessionUser();
   if (!user) return { success: false, error: 'Unauthorized' };
 
-  const result = retryOrderPayment(orderId, user.id, outcome);
+  const result = await retryOrderPayment(orderId, user.id, outcome);
   revalidatePath('/order', 'page');
   revalidatePath('/account', 'page');
   return result;

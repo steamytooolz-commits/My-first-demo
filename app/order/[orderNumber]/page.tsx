@@ -18,9 +18,9 @@ interface OrderPageProps {
 export default async function OrderDetailPage({ params }: OrderPageProps) {
   const { orderNumber } = await params;
   const user = await getSessionUser();
-  const settings = getStoreSettings();
+  const settings = await getStoreSettings();
 
-  const order = db.prepare(`
+  const order = await db.prepare(`
     SELECT * FROM orders WHERE order_number = ?
   `).get(orderNumber) as any;
 
@@ -45,15 +45,15 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
     );
   }
 
-  const items = db.prepare(`
+  const items = await db.prepare(`
     SELECT * FROM order_items WHERE order_id = ? ORDER BY rowid ASC
   `).all(order.id) as any[];
 
-  const invoice = db.prepare(`
+  const invoice = await db.prepare(`
     SELECT invoice_number, status, total_cents FROM invoices WHERE order_id = ?
   `).get(order.id) as any;
 
-  const events = db.prepare(`
+  const events = await db.prepare(`
     SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at DESC
   `).all(order.id) as any[];
 

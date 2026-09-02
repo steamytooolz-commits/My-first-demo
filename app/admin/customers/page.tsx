@@ -3,14 +3,14 @@ import { adminExecuteErasureAction } from '@/app/actions/admin';
 import { Users, Shield, Download, CheckCircle, Trash2, Clock } from 'lucide-react';
 
 export default async function AdminCustomersPage() {
-  const customers = db.prepare(`
+  const customers = await db.prepare(`
     SELECT u.*,
            (SELECT COUNT(*) FROM orders WHERE user_id = u.id) as order_count
     FROM users u
     ORDER BY u.created_at DESC
   `).all() as any[];
 
-  const privacyRequests = db.prepare(`
+  const privacyRequests = await db.prepare(`
     SELECT pr.*, u.email as user_email
     FROM data_subject_requests pr
     LEFT JOIN users u ON pr.user_id = u.id

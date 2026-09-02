@@ -37,7 +37,7 @@ export default async function AdminOrdersPage({ searchParams }: AdminOrdersPageP
 
   query += ` ORDER BY o.placed_at DESC`;
 
-  const orders = db.prepare(query).all(...params) as any[];
+  const orders = await db.prepare(query).all(...params) as any[];
 
   const statusColors: Record<string, string> = {
     paid: 'bg-emerald-100 text-emerald-900',

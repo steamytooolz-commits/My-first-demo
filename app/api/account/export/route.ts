@@ -8,7 +8,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const exportData = generateCustomerExport(user.id);
+  const exportData = await generateCustomerExport(user.id);
   const jsonString = JSON.stringify(exportData, null, 2);
 
   return new NextResponse(jsonString, {

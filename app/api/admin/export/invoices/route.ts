@@ -9,7 +9,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const invoices = db.prepare(`
+  const invoices = await db.prepare(`
     SELECT i.invoice_number, o.order_number, i.status, i.issue_date, i.due_date,
            i.total_cents, i.amount_paid_cents
     FROM invoices i

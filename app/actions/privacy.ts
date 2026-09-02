@@ -8,7 +8,7 @@ export async function requestErasureAction(prevState: any, formData: FormData): 
   const user = await requireUser();
   const reason = String(formData.get('reason') || '').trim();
 
-  const result = requestAccountErasure(user.id, reason);
+  const result = await requestAccountErasure(user.id, reason);
   revalidatePath('/account/privacy');
   return result;
 }

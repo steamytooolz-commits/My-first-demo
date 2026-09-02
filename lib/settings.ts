@@ -87,9 +87,9 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   vat_number: '',
 };
 
-export function getStoreSettings(): StoreSettings {
+export async function getStoreSettings(): Promise<StoreSettings> {
   try {
-    const row = db.prepare('SELECT value_json FROM settings WHERE key = ?').get('store') as { value_json: string } | undefined;
+    const row = await db.prepare('SELECT value_json FROM settings WHERE key = ?').get('store') as { value_json: string } | undefined;
     if (!row) {
       return DEFAULT_STORE_SETTINGS;
     }
@@ -101,16 +101,21 @@ export function getStoreSettings(): StoreSettings {
   }
 }
 
-export function updateStoreSettings(settings: Partial<StoreSettings>): StoreSettings {
-  const current = getStoreSettings();
+export async function updateStoreSettings(settings: Partial<StoreSettings>): Promise<StoreSettings> {
+  const current = await getStoreSettings();
   const merged = { ...current, ...settings };
   const validated = storeSettingsSchema.parse(merged);
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO settings (key, value_json)
     VALUES ('store', ?)
     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json
   `).run(JSON.stringify(validated));
 
   return validated;
+}
+
+// Sync wrapper for places that cannot be async yet (fallback to default if not awaited)
+export function getStoreSettingsSync(): StoreSettings {
+  return DEFAULT_STORE_SETTINGS;
 }

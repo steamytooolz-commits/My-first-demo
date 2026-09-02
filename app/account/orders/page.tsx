@@ -7,7 +7,7 @@ import { FileText, ArrowRight } from 'lucide-react';
 export default async function CustomerOrdersPage() {
   const user = await requireUser();
 
-  const orders = db.prepare(`
+  const orders = await db.prepare(`
     SELECT o.*, 
            (SELECT invoice_number FROM invoices WHERE order_id = o.id LIMIT 1) as invoice_number,
            (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count

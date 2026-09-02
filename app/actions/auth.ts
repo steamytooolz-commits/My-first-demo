@@ -44,7 +44,7 @@ export async function loginAction(prevState: any, formData: FormData): Promise<A
   const email = parsed.data.email.toLowerCase();
 
   // 2. Check login throttle (Section 12: 5 attempts per 15 min per email+ip)
-  const throttle = checkLoginThrottle(email, ip);
+  const throttle = await checkLoginThrottle(email, ip);
   if (!throttle.allowed) {
     return {
       success: false,
@@ -53,14 +53,14 @@ export async function loginAction(prevState: any, formData: FormData): Promise<A
   }
 
   // 3. Look up user
-  const user = db.prepare(`
+  const user = await db.prepare(`
     SELECT id, email, password_hash, status, role, deleted_at
     FROM users
     WHERE email = ? COLLATE NOCASE
   `).get(email) as any;
 
   if (!user || user.status !== 'active' || user.deleted_at !== null) {
-    recordLoginAttempt(email, ip, false);
+    await recordLoginAttempt(email, ip, false);
     return {
       success: false,
       error: 'Invalid email or password.',
@@ -70,7 +70,7 @@ export async function loginAction(prevState: any, formData: FormData): Promise<A
   // 4. Verify password
   const valid = verifyPassword(rawPassword, user.password_hash);
   if (!valid) {
-    recordLoginAttempt(email, ip, false);
+    await recordLoginAttempt(email, ip, false);
     return {
       success: false,
       error: 'Invalid email or password.',
@@ -78,7 +78,7 @@ export async function loginAction(prevState: any, formData: FormData): Promise<A
   }
 
   // Success: record attempt & create session
-  recordLoginAttempt(email, ip, true);
+  await recordLoginAttempt(email, ip, true);
   await createSession(user.id, ip, headersList.get('user-agent') || undefined);
 
   // Merge any active guest cart
@@ -124,7 +124,7 @@ export async function registerAction(prevState: any, formData: FormData): Promis
   const { email, password, full_name, phone, marketing_consent } = parsed.data;
 
   // Check uniqueness
-  const existing = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
+  const existing = await db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email);
   if (existing) {
     return {
       success: false,
@@ -136,7 +136,7 @@ export async function registerAction(prevState: any, formData: FormData): Promis
   const passwordHashed = hashPassword(password);
   const now = new Date().toISOString();
 
-  db.prepare(`
+  await db.prepare(`
     INSERT INTO users (
       id, email, password_hash, full_name, phone, role, status,
       marketing_consent, poia_processing_consent_at, created_at, updated_at
@@ -186,7 +186,7 @@ export async function updateProfileAction(prevState: any, formData: FormData): P
     return { success: false, error: 'Invalid profile information' };
   }
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE users
     SET full_name = ?, phone = ?, marketing_consent = ?, updated_at = datetime('now')
     WHERE id = ?
@@ -215,13 +215,13 @@ export async function changePasswordAction(prevState: any, formData: FormData): 
     return { success: false, error: parsed.error.issues[0]?.message || 'Invalid password inputs' };
   }
 
-  const currentUser = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id) as any;
+  const currentUser = await db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id) as any;
   if (!currentUser || !verifyPassword(raw.current_password, currentUser.password_hash)) {
     return { success: false, error: 'Current password is incorrect' };
   }
 
   const newHash = hashPassword(raw.new_password);
-  db.prepare(`
+  await db.prepare(`
     UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?
   `).run(newHash, user.id);
 

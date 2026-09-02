@@ -3,7 +3,7 @@ import { adminSaveCategoryAction, adminDeleteCategoryAction } from '@/app/action
 import { Layers, Plus, Trash2, Edit } from 'lucide-react';
 
 export default async function AdminCategoriesPage() {
-  const categories = db.prepare(`
+  const categories = await db.prepare(`
     SELECT c.*,
            (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id) as product_count
     FROM categories c

@@ -16,17 +16,17 @@ export default async function AdminDashboardPage() {
   await requireAdmin();
 
   // Financial metrics
-  const revenueStats = db.prepare(`
+  const revenueStats = await db.prepare(`
     SELECT COALESCE(SUM(total_cents), 0) as total_revenue, COUNT(*) as total_orders
     FROM orders
     WHERE status != 'cancelled'
   `).get() as any;
 
-  const pendingOrdersCount = (db.prepare(`
+  const pendingOrdersCount = (await db.prepare(`
     SELECT COUNT(*) as count FROM orders WHERE status = 'pending_payment'
   `).get() as any).count;
 
-  const lowStockVariants = db.prepare(`
+  const lowStockVariants = await db.prepare(`
     SELECT pv.id, pv.sku, pv.name, pv.stock_qty, pv.low_stock_threshold, p.name as product_name
     FROM product_variants pv
     JOIN products p ON pv.product_id = p.id
@@ -35,7 +35,7 @@ export default async function AdminDashboardPage() {
     LIMIT 10
   `).all() as any[];
 
-  const recentOrders = db.prepare(`
+  const recentOrders = await db.prepare(`
     SELECT o.*, (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count
     FROM orders o
     ORDER BY o.placed_at DESC
