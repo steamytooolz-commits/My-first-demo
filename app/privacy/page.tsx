@@ -2,7 +2,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { getStoreSettings } from '@/lib/settings';
 
-export async function PrivacyPage() {
+export default async function PrivacyPage() {
   const settings = await getStoreSettings();
 
   return (

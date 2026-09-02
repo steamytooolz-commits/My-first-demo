@@ -2,7 +2,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { getStoreSettings } from '@/lib/settings';
 
-export async function TermsPage() {
+export default async function TermsPage() {
   const settings = await getStoreSettings();
 
   return (

@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { getStoreSettings } from '@/lib/settings';
 import { ShieldCheck, Mail, Phone, MapPin } from 'lucide-react';
 
-export async function Footer() {
-  const settings = getStoreSettings();
+export default async function Footer() {
+  const settings = await getStoreSettings();
 
   return (
     <footer className="border-t border-slate-200 bg-white text-slate-600 text-sm no-print">

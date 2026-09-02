@@ -4,7 +4,7 @@ import ContactForm from '@/components/ContactForm';
 import { getStoreSettings } from '@/lib/settings';
 import { Mail, Phone, MapPin, Clock } from 'lucide-react';
 
-export async function ContactPage() {
+export default async function ContactPage() {
   const settings = await getStoreSettings();
 
   return (

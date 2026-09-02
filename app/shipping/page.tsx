@@ -3,7 +3,7 @@ import Footer from '@/components/Footer';
 import { getStoreSettings } from '@/lib/settings';
 import { formatZar } from '@/lib/money';
 
-export async function ShippingPage() {
+export default async function ShippingPage() {
   const settings = await getStoreSettings();
 
   return (
