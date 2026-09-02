@@ -529,9 +529,14 @@ if (isPg && pgPool) {
       const hasUsers = await pgWrapper.prepare("SELECT table_name FROM information_schema.tables WHERE table_name='users'").get() as any;
       if (!hasUsers) {
         console.log('[db] Postgres empty, bootstrapping schema...');
-        const stmts = FALLBACK_SCHEMA.split(';').map(s => s.trim()).filter(Boolean);
+        // Use Postgres-specific schema (SQLite FALLBACK_SCHEMA shim may miss some PG syntax, so use direct pg exec)
+        const pgSchema = FALLBACK_SCHEMA
+          .replace(/COLLATE NOCASE/g, '')
+          .replace(/datetime\([^)]*\)/g, 'NOW()')
+          .replace(/date\('now'\)/g, 'CURRENT_DATE');
+        const stmts = pgSchema.split(';').map(s => s.trim()).filter(Boolean);
         for (const stmt of stmts) {
-          try { await pgWrapper.exec(stmt); } catch (e) { console.warn('[db] PG schema stmt failed:', (e as Error).message.slice(0,200)); }
+          try { await pgWrapper.exec(stmt); } catch (e) { console.warn('[db] PG schema stmt failed:', (e as Error).message.slice(0,300)); }
         }
         console.log('[db] Postgres schema bootstrapped');
       }
@@ -566,7 +571,40 @@ if (isPg && pgPool) {
     bootstrapPg,
     new Promise((_, reject) => setTimeout(() => reject(new Error('Postgres bootstrap timeout after 7s — Neon may be paused')), 7000))
   ]).catch(e => {
-    console.warn('[db] pgReady timeout/fallback (proceeding, next query may retry):', (e as Error).message);
+    console.warn('[db] pgReady timeout/fallback (will use SQLite for this instance):', (e as Error).message);
+    // Fallback to SQLite so GET / doesn't hang 0-status
+    try {
+      isPg = false;
+      const fallbackDb = new (require('better-sqlite3'))(dbPath);
+      fallbackDb.pragma('foreign_keys = ON');
+      fallbackDb.pragma('journal_mode = WAL');
+      fallbackDb.pragma('busy_timeout = 5000');
+      ensureSchema(fallbackDb);
+      ensureDefaultSeed(fallbackDb);
+      globalForDb.db = fallbackDb;
+      const sqliteWrapper: any = {
+        prepare: (sql: string) => {
+          const stmt: any = fallbackDb.prepare(sql);
+          return {
+            get: async (...params: any[]) => stmt.get(...params),
+            all: async (...params: any[]) => stmt.all(...params),
+            run: async (...params: any[]) => stmt.run(...params),
+          };
+        },
+        exec: async (sql: string) => fallbackDb.exec(sql),
+        transaction: (fn: any) => {
+          return async (...args: any[]) => {
+            try { fallbackDb.exec('BEGIN'); const r = await fn(...args); fallbackDb.exec('COMMIT'); return r; } catch (e) { try { fallbackDb.exec('ROLLBACK'); } catch {} throw e; }
+          };
+        },
+        pragma: (s: string) => fallbackDb.pragma(s),
+        _raw: fallbackDb,
+      };
+      db = sqliteWrapper;
+      console.log('[db] Fallback to SQLite after Postgres timeout');
+    } catch (fbErr) {
+      console.error('[db] Fallback to SQLite also failed:', fbErr);
+    }
   }) as Promise<void>;
 } else {
   const sqliteDb =
