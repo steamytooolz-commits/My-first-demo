@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ShoppingBag, User, Shield, Search, BookOpen, PenTool, Layers } from 'lucide-react';
+import { ShoppingBag, User, Shield, Search } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { getCartSummary } from '@/lib/cart';
 

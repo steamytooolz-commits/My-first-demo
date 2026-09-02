@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_FILE: ./data/app.db
+      SESSION_SECRET: ci-test-secret-must-be-at-least-32-chars-long
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: ChangeMe123!
+      SEED_DEMO: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Tests
+        run: bun run test
+
+      - name: DB migrate
+        run: bun run db:migrate
+
+      - name: DB seed
+        run: bun run db:seed
+
+      - name: Build
+        run: bun run build
+        env:
+          # Required at build time for Next.js (NEXT_PUBLIC not needed, but ensure DB exists)
+          DATABASE_FILE: ./data/app.db
+
+      - name: Verify build output
+        run: |
+          test -d .next || (echo "Build failed: .next not found" && exit 1)
+          echo "Build succeeded, .next size: $(du -sh .next | cut -f1)"
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+      - name: Install
+        run: bun install --frozen-lockfile
+      - name: Check for Vercel read-only FS regression
+        run: |
+          echo "Checking lib/db.ts handles Vercel /var/task/data..."
+          grep -q "getEffectiveDbPath" lib/db.ts || (echo "Missing getEffectiveDbPath in lib/db.ts" && exit 1)
+          grep -q "FALLBACK_SCHEMA" lib/db.ts || (echo "Missing FALLBACK_SCHEMA" && exit 1)
+          grep -q "ensureSchema" lib/db.ts || (echo "Missing ensureSchema" && exit 1)
+          echo "Vercel fix present"
+          # Ensure scripts also patched
+          for f in scripts/*.mjs; do
+            echo "Checking $f..."
+            grep -q "getEffectiveDbPath" "$f" || echo "WARN: $f missing Vercel patch (may be ok for non-DB scripts)"
+          done
+          echo "Audit done"
