@@ -1,0 +1,6 @@
+{
+  "name": "Paper & Quill Stationery",
+  "description": "A complete, production-ready stationery online store featuring storefront browsing, cart, checkout simulation, customer portal, invoicing, POPIA compliance, and admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
