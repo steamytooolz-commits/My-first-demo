@@ -48,9 +48,18 @@ export default function ShippingPage() {
           </section>
 
           <section className="space-y-2">
-            <h2 className="font-serif text-base font-bold text-slate-900">3. 30-Day Stationery Return Guarantee</h2>
+            <h2 className="font-serif text-base font-bold text-slate-900">3. Returns, Cooling-Off &amp; Statutory Rights</h2>
             <p>
-              If your stationery arrives damaged, defective, or does not meet expectations, return it within 30 days in its original packaging for an immediate replacement or full refund.
+              <strong>Statutory cooling-off — ECT Act 25 of 2002, Section 44:</strong> For electronic transactions, you may <strong>cancel without reason/penalty within 7 days after receipt of goods</strong> (or 7 days after conclusion for services). Only direct return cost may be charged (44(2)), refund within 30 days (44(3)). This does <strong>not</strong> apply to goods personalised, perishable, or made to your specifications (44(2)(f)). <strong>CPA 68 of 2008, Section 16</strong> (5 business days for direct marketing) does <strong>not</strong> apply when ECT 44 applies (CPA 16(1)).
+            </p>
+            <p>
+              <strong>Failure to disclose (ECT 43(3)):</strong> If we failed to provide Section 43 information (price, delivery, return policy, etc.), you may cancel within <strong>14 days</strong> of receipt.
+            </p>
+            <p>
+              <strong>Voluntary 30-Day Guarantee (More Generous):</strong> Beyond the statutory 7 days, if stationery arrives damaged, defective, or not as described, return it <strong>within 30 days in original packaging</strong> for immediate replacement or full refund. This exceeds ECT requirements and is offered at our discretion for demo purposes. For CPA Section 20/56 rights (unsafe/defective goods), statutory rights apply regardless.
+            </p>
+            <p className="text-[10px] italic text-slate-500">
+              Demo simulation — no real courier is dispatched. Returns are simulated via admin order status `cancelled`/`refunded` with stock restoration and invoice `void`/`refunded`.
             </p>
           </section>
         </div>

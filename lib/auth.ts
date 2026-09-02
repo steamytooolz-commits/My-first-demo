@@ -61,7 +61,7 @@ export function verifyPassword(password: string, storedHash: string): boolean {
 
 /**
  * Validate password requirements:
- * - Minimum 10 characters
+ * - Minimum 8 characters (matches lib/validation.ts, Zod, and UI)
  * - At least one letter
  * - At least one number
  */
