@@ -25,8 +25,8 @@ export async function nextSequence(kind: 'order' | 'invoice', prefix: string): P
           client.release();
         }
       } else {
-        // SQLite: sync transaction
-        return (db as any).transaction(() => {
+        // SQLite: async-capable transaction (via BEGIN/COMMIT wrapper in lib/db.ts)
+        return await (db as any).transaction(async () => {
           await db.prepare(`
             INSERT OR IGNORE INTO sequences (kind, year, last_number)
             VALUES (?, ?, 0)

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { getStoreSettings } from '@/lib/settings';
 import { ShieldCheck, Mail, Phone, MapPin } from 'lucide-react';
 
-export default function Footer() {
+export async function Footer() {
   const settings = getStoreSettings();
 
   return (
