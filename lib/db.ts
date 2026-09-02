@@ -523,8 +523,8 @@ if (isPg && pgPool) {
   }
   db = pgWrapper;
   console.log('[db] Postgres mode — set DATABASE_URL to use free tier (Neon/Vercel). All queries are async (await required).');
-  // Ensure schema for Postgres (blocking for first queries via pgReady)
-  pgReady = (async () => {
+  // Ensure schema for Postgres (blocking for first queries via pgReady) — 7s timeout to avoid Vercel 0-status hang (Neon cold start)
+  const bootstrapPg = (async () => {
     try {
       const hasUsers = await pgWrapper.prepare("SELECT table_name FROM information_schema.tables WHERE table_name='users'").get() as any;
       if (!hasUsers) {
@@ -559,10 +559,15 @@ if (isPg && pgPool) {
         }
       } catch (e) { console.warn('[db] Postgres seed check failed:', (e as Error).message); }
     } catch (e) {
-      console.error('[db] Postgres bootstrap failed, falling back to SQLite for this request:', e);
-      // Do not crash — will fallback to SQLite on next cold start if needed, but for now let pg errors surface as 500 so user sees issue
+      console.error('[db] Postgres bootstrap failed:', e);
     }
   })();
+  pgReady = Promise.race([
+    bootstrapPg,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Postgres bootstrap timeout after 7s — Neon may be paused')), 7000))
+  ]).catch(e => {
+    console.warn('[db] pgReady timeout/fallback (proceeding, next query may retry):', (e as Error).message);
+  }) as Promise<void>;
 } else {
   const sqliteDb =
     globalForDb.db ??
