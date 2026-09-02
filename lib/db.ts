@@ -568,6 +568,24 @@ if (isPg && pgPool) {
           await pgWrapper.prepare(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`).run(JSON.stringify({
             store_name: 'Paper & Quill Stationery', contact_email: 'hello@paperandquill.co.za', phone: '', address_line1: '42 Bram Fischer Drive', address_line2: 'Ferndale', city: 'Johannesburg', province: 'Gauteng', postal_code: '2194', country: 'ZA', currency: 'ZAR', tax_enabled: false, tax_rate_percent: 0, prices_include_tax: true, shipping_taxable: true, free_shipping_enabled: true, free_shipping_threshold_cents: 95000, standard_base_cents: 7500, express_base_cents: 15000, weight_threshold_g: 5000, weight_surcharge_cents: 2500, express_weight_surcharge_cents: 5000, invoice_prefix: 'INV', order_prefix: 'ORD', invoice_due_days: 14, bank_name: 'First National Bank', bank_account_name: 'Paper & Quill Stationery (Pty) Ltd', bank_account_number: '62000000000', bank_branch_code: '250655', bank_reference_note: 'Please use your Order Number as payment reference', vat_number: ''
           }));
+          // Seed categories for Postgres as well (fixes FK on product create)
+          try {
+            const catCount = await pgWrapper.prepare('SELECT COUNT(*) as c FROM categories').get() as any;
+            const cc = parseInt(catCount?.c ?? catCount?.count ?? 0, 10);
+            if (cc === 0) {
+              const cats = [
+                { id: '11111111-1111-4000-8000-000000000001', name: 'Pens & Writing', slug: 'pens-writing' },
+                { id: '11111111-1111-4000-8000-000000000002', name: 'Notebooks & Pads', slug: 'notebooks-pads' },
+                { id: '11111111-1111-4000-8000-000000000003', name: 'Office Supplies', slug: 'office-supplies' },
+                { id: '11111111-1111-4000-8000-000000000004', name: 'Art Supplies', slug: 'art-supplies' },
+                { id: '11111111-1111-4000-8000-000000000005', name: 'School Essentials', slug: 'school-essentials' },
+              ];
+              for (const c of cats) {
+                await pgWrapper.prepare(`INSERT INTO categories (id, name, slug, description, active, sort_order) VALUES (?, ?, ?, '', 1, ?) ON CONFLICT(id) DO NOTHING`).run(c.id, c.name, c.slug, cats.indexOf(c) + 1);
+              }
+              console.log('[db] Postgres seeded categories (5)');
+            }
+          } catch {}
           console.log('[db] Postgres seeded admin/customer');
         }
       } catch (e) { console.warn('[db] Postgres seed check failed:', (e as Error).message); }
@@ -751,6 +769,28 @@ function ensureDefaultSeed(database: Database.Database) {
       } catch (e) {
         console.warn('[db] Customer seed skipped:', (e as Error).message);
       }
+    }
+
+    // Seed categories if empty (fixes FK constraint failed on product create when categories missing on fresh /tmp or Postgres)
+    try {
+      const catCount = database.prepare('SELECT COUNT(*) as c FROM categories').get() as any;
+      if (!catCount || catCount.c === 0) {
+        const cats = [
+          { id: '11111111-1111-4000-8000-000000000001', name: 'Pens & Writing', slug: 'pens-writing', description: 'Fine pens, gel pens, highlighters, and precision drawing instruments', sort_order: 1 },
+          { id: '11111111-1111-4000-8000-000000000002', name: 'Notebooks & Pads', slug: 'notebooks-pads', description: 'Hardcover journals, dot-grid books, and premium paper refills', sort_order: 2 },
+          { id: '11111111-1111-4000-8000-000000000003', name: 'Office Supplies', slug: 'office-supplies', description: 'Desk organizers, staplers, paper clips, and archival storage', sort_order: 3 },
+          { id: '11111111-1111-4000-8000-000000000004', name: 'Art Supplies', slug: 'art-supplies', description: 'Watercolour markers, sketching pencils, and artist canvas pads', sort_order: 4 },
+          { id: '11111111-1111-4000-8000-000000000005', name: 'School Essentials', slug: 'school-essentials', description: 'Durable pencil cases, geometric math sets, and scientific calculators', sort_order: 5 },
+        ];
+        for (const c of cats) {
+          try {
+            database.prepare(`INSERT INTO categories (id, name, slug, description, active, sort_order) VALUES (?, ?, ?, ?, 1, ?) ON CONFLICT(id) DO NOTHING`).run(c.id, c.name, c.slug, c.description, c.sort_order);
+          } catch {}
+        }
+        console.log('[db] Seeded categories (5)');
+      }
+    } catch (e) {
+      console.warn('[db] Category seed skipped:', (e as Error).message);
     }
 
     try {

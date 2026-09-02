@@ -45,6 +45,16 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
     return { success: false, error: 'A product with this URL slug already exists.' };
   }
 
+  // Validate category_id FK — if provided but not found, set to null to avoid FOREIGN KEY constraint failed (ephemeral DB may have empty categories)
+  let categoryId: string | null = p.category_id;
+  if (categoryId) {
+    const catExists = await db.prepare('SELECT id FROM categories WHERE id = ?').get(categoryId) as any;
+    if (!catExists) {
+      console.warn(`[adminSaveProduct] category_id ${categoryId} not found, setting to null to avoid FK fail`);
+      categoryId = null;
+    }
+  }
+
   await db.transaction(async () => {
     if (id) {
       await db.prepare(`
@@ -52,7 +62,7 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
         SET category_id = ?, name = ?, slug = ?, description = ?, brand = ?,
             active = ?, featured = ?, updated_at = datetime('now')
         WHERE id = ?
-      `).run(p.category_id, p.name, p.slug, p.description, p.brand, p.active ? 1 : 0, p.featured ? 1 : 0, id);
+      `).run(categoryId, p.name, p.slug, p.description, p.brand, p.active ? 1 : 0, p.featured ? 1 : 0, id);
 
       if (imageUrl) {
         await db.prepare('DELETE FROM product_images WHERE product_id = ?').run(id);
@@ -69,7 +79,7 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
         INSERT INTO products (
           id, category_id, name, slug, description, brand, active, featured, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-      `).run(newId, p.category_id, p.name, p.slug, p.description, p.brand, p.active ? 1 : 0, p.featured ? 1 : 0);
+      `).run(newId, categoryId, p.name, p.slug, p.description, p.brand, p.active ? 1 : 0, p.featured ? 1 : 0);
 
       if (imageUrl) {
         await db.prepare(`
