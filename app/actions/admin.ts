@@ -46,7 +46,7 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
   }
 
   // Validate category_id FK — if provided but not found, set to null to avoid FOREIGN KEY constraint failed (ephemeral DB may have empty categories)
-  let categoryId: string | null = p.category_id;
+  let categoryId: string | null = p.category_id ?? null;
   if (categoryId) {
     const catExists = await db.prepare('SELECT id FROM categories WHERE id = ?').get(categoryId) as any;
     if (!catExists) {
