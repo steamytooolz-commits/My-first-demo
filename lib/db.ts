@@ -16,6 +16,10 @@ if (pgUrl && pgUrl.startsWith('postgres')) {
       connectionString: pgUrl,
       ssl: pgUrl.includes('localhost') ? false : { rejectUnauthorized: false },
       max: 5,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 10000,
+      query_timeout: 5000,
+      statement_timeout: 5000,
     });
     console.log('[db] Using Postgres pool (free tier) — persistence enabled');
   } catch (e) {
