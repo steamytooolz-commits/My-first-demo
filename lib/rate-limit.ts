@@ -12,6 +12,33 @@ export function checkRateLimit(
   limit: number,
   windowMs: number
 ): { allowed: boolean; retryAfterSeconds: number } {
+  // On Vercel, memoryStore is per-lambda (not shared) — fallback to DB for persistence across instances
+  if (process.env.VERCEL) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS rate_limits (
+          key TEXT PRIMARY KEY,
+          count INTEGER NOT NULL,
+          reset_at INTEGER NOT NULL
+        )
+      `);
+      const now = Date.now();
+      const row = db.prepare('SELECT count, reset_at as resetAt FROM rate_limits WHERE key = ?').get(key) as any;
+      if (!row || now > row.resetAt) {
+        db.prepare('INSERT OR REPLACE INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)').run(key, now + windowMs);
+        return { allowed: true, retryAfterSeconds: 0 };
+      }
+      if (row.count >= limit) {
+        const retryAfterSeconds = Math.max(1, Math.ceil((row.resetAt - now) / 1000));
+        return { allowed: false, retryAfterSeconds };
+      }
+      db.prepare('UPDATE rate_limits SET count = count + 1 WHERE key = ?').run(key);
+      return { allowed: true, retryAfterSeconds: 0 };
+    } catch {
+      // Fallback to memory if DB fails (e.g., during build)
+    }
+  }
+
   const now = Date.now();
   const record = memoryStore.get(key);
 
