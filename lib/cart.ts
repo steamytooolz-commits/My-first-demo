@@ -110,10 +110,11 @@ export async function getOrCreateActiveCart(): Promise<{ cartId: string; isGuest
   `).run(cartId, newGuestToken);
 
   try {
+    const isProd = process.env.NODE_ENV === 'production';
     cookieStore.set(GUEST_CART_COOKIE_NAME, newGuestToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: '/',
       maxAge: 30 * 24 * 60 * 60,
     });
@@ -192,10 +193,11 @@ export async function mergeGuestCart(userId: string): Promise<void> {
   })();
 
   try {
+    const isProd = process.env.NODE_ENV === 'production';
     cookieStore.set(GUEST_CART_COOKIE_NAME, '', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       path: '/',
       maxAge: 0,
     });
