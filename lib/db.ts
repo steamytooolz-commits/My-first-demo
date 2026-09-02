@@ -429,6 +429,8 @@ function ensureSchema(database: Database.Database) {
   }
 }
 
+let pgReady: Promise<void> | null = null;
+
 // Postgres wrapper — mimics better-sqlite3 sync API but via async pool
 function createPgWrapper(pool: any) {
   const wrap = {
@@ -437,8 +439,9 @@ function createPgWrapper(pool: any) {
       let idx = 0;
       const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
       // SQLite -> Postgres dialect shims
-      const shimmed = pgSql
+      let shimmed = pgSql
         .replace(/COLLATE NOCASE/g, '')
+        .replace(/INSERT OR IGNORE INTO sequences/g, 'INSERT INTO sequences')
         .replace(/INSERT OR IGNORE/g, 'INSERT')
         .replace(/ON CONFLICT\(key\) DO UPDATE SET value_json = excluded\.value_json/g, 'ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json')
         .replace(/ON CONFLICT\(key\) DO NOTHING/g, 'ON CONFLICT (key) DO NOTHING')
@@ -449,20 +452,32 @@ function createPgWrapper(pool: any) {
         .replace(/date\('now'\)/g, 'CURRENT_DATE')
         .replace(/date\('now', '\+12 days'\)/g, "CURRENT_DATE + INTERVAL '12 days'")
         .replace(/date\('now', '\+14 days'\)/g, "CURRENT_DATE + INTERVAL '14 days'");
+      // Handle INSERT OR IGNORE without explicit ON CONFLICT — add DO NOTHING for sequences/schema_migrations
+      if (shimmed.includes('INSERT INTO sequences') && !shimmed.includes('ON CONFLICT')) {
+        shimmed = shimmed.replace('INSERT INTO sequences', 'INSERT INTO sequences ON CONFLICT (kind, year) DO NOTHING');
+      }
+      if (shimmed.includes('INSERT INTO schema_migrations') && !shimmed.includes('ON CONFLICT')) {
+        shimmed = shimmed.replace('INSERT INTO schema_migrations', 'INSERT INTO schema_migrations ON CONFLICT (id) DO NOTHING');
+      }
+
+      const withPgReady = async (fn: () => Promise<any>) => {
+        if (pgReady) await pgReady;
+        return fn();
+      };
 
       return {
-        get: async (...params: any[]) => {
+        get: async (...params: any[]) => withPgReady(async () => {
           const res = await pool.query(shimmed, params);
           return res.rows[0];
-        },
-        all: async (...params: any[]) => {
+        }),
+        all: async (...params: any[]) => withPgReady(async () => {
           const res = await pool.query(shimmed, params);
           return res.rows;
-        },
-        run: async (...params: any[]) => {
+        }),
+        run: async (...params: any[]) => withPgReady(async () => {
           const res = await pool.query(shimmed, params);
           return { changes: res.rowCount, lastInsertRowid: res.rows[0]?.id };
-        },
+        }),
       };
     },
     exec: async (sql: string) => {
@@ -500,17 +515,52 @@ let db: any;
 
 if (isPg && pgPool) {
   const pgWrapper: any = createPgWrapper(pgPool);
-  // Add sync-like pragma for compatibility
   pgWrapper.pragma = () => {};
-  // For global caching
   if (process.env.NODE_ENV !== 'production') {
     globalForDb.pgPool = pgPool;
   }
-  // Wrap to handle both sync and async callers: we keep pgWrapper as is
-  // But to avoid breaking existing `await db.prepare(...).get()` sync calls, we make them async and require await.
-  // Existing code after this patch will be updated to `await db.prepare(...).get()`.
   db = pgWrapper;
   console.log('[db] Postgres mode — set DATABASE_URL to use free tier (Neon/Vercel). All queries are async (await required).');
+  // Ensure schema for Postgres (blocking for first queries via pgReady)
+  pgReady = (async () => {
+    try {
+      const hasUsers = await pgWrapper.prepare("SELECT table_name FROM information_schema.tables WHERE table_name='users'").get() as any;
+      if (!hasUsers) {
+        console.log('[db] Postgres empty, bootstrapping schema...');
+        const stmts = FALLBACK_SCHEMA.split(';').map(s => s.trim()).filter(Boolean);
+        for (const stmt of stmts) {
+          try { await pgWrapper.exec(stmt); } catch (e) { console.warn('[db] PG schema stmt failed:', (e as Error).message.slice(0,200)); }
+        }
+        console.log('[db] Postgres schema bootstrapped');
+      }
+      // Seed admin/customer for Postgres as well
+      try {
+        const countRow = await pgWrapper.prepare('SELECT COUNT(*) as c FROM users').get() as any;
+        const c = parseInt(countRow?.c ?? countRow?.count ?? 0, 10);
+        if (c === 0) {
+          console.log('[db] Postgres no users, seeding...');
+          const adminEmail = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase();
+          const adminPassword = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
+          const adminId = '00000000-0000-4000-a000-000000000001';
+          const now = new Date().toISOString();
+          const hash = (p: string) => {
+            const salt = crypto.randomBytes(16).toString('hex');
+            const dk = crypto.scryptSync(p, salt, 64, { N: 16384, r: 8, p: 1 });
+            return `scrypt:16384:8:1:${salt}:${dk.toString('hex')}`;
+          };
+          await pgWrapper.prepare(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'System Administrator', '', 'admin', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`).run(adminId, adminEmail, hash(adminPassword), now, now, now);
+          await pgWrapper.prepare(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'Thabo Mokoena', '', 'customer', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`).run('00000000-0000-4000-a000-000000000002', 'customer@example.com', hash('Customer123!'), now, now, now);
+          await pgWrapper.prepare(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`).run(JSON.stringify({
+            store_name: 'Paper & Quill Stationery', contact_email: 'hello@paperandquill.co.za', phone: '', address_line1: '42 Bram Fischer Drive', address_line2: 'Ferndale', city: 'Johannesburg', province: 'Gauteng', postal_code: '2194', country: 'ZA', currency: 'ZAR', tax_enabled: false, tax_rate_percent: 0, prices_include_tax: true, shipping_taxable: true, free_shipping_enabled: true, free_shipping_threshold_cents: 95000, standard_base_cents: 7500, express_base_cents: 15000, weight_threshold_g: 5000, weight_surcharge_cents: 2500, express_weight_surcharge_cents: 5000, invoice_prefix: 'INV', order_prefix: 'ORD', invoice_due_days: 14, bank_name: 'First National Bank', bank_account_name: 'Paper & Quill Stationery (Pty) Ltd', bank_account_number: '62000000000', bank_branch_code: '250655', bank_reference_note: 'Please use your Order Number as payment reference', vat_number: ''
+          }));
+          console.log('[db] Postgres seeded admin/customer');
+        }
+      } catch (e) { console.warn('[db] Postgres seed check failed:', (e as Error).message); }
+    } catch (e) {
+      console.error('[db] Postgres bootstrap failed, falling back to SQLite for this request:', e);
+      // Do not crash — will fallback to SQLite on next cold start if needed, but for now let pg errors surface as 500 so user sees issue
+    }
+  })();
 } else {
   const sqliteDb =
     globalForDb.db ??

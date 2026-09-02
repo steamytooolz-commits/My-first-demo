@@ -136,7 +136,7 @@ export async function createSession(userId: string, ip?: string, userAgent?: str
   const expiresAt = new Date(expSeconds * 1000).toISOString();
 
   try {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, ip, user_agent)
       VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
     `).run(sessionId, userId, tokenHash, expiresAt, ip ?? null, userAgent ?? null);
@@ -173,7 +173,7 @@ export async function destroySession(): Promise<void> {
     if (token) {
       try {
         const tokenHash = hashSessionToken(token);
-        db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
+        await db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
       } catch {}
     }
 
@@ -206,7 +206,7 @@ export async function getSessionUser(): Promise<User | null> {
 
     // 1. Try DB session (fast path, works locally and when DB is shared)
     try {
-      const row = db.prepare(`
+      const row = await db.prepare(`
         SELECT 
           u.id, u.email, u.full_name, u.phone, u.role, u.status,
           u.marketing_consent, u.poia_processing_consent_at,
@@ -227,7 +227,7 @@ export async function getSessionUser(): Promise<User | null> {
     // 2. Fallback: stateless JWT verification (survives Vercel per-instance /tmp loss)
     const jwt = verifyJwt(token);
     if (jwt) {
-      const user = db.prepare(`
+      const user = await db.prepare(`
         SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at, deleted_at
         FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
       `).get(jwt.sub) as User | undefined;
