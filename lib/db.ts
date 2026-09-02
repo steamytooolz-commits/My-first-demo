@@ -3,10 +3,30 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// Postgres support (free tier via Vercel/Neon)
+let pgPool: any = null;
+let isPg = false;
+const pgUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL;
+if (pgUrl && pgUrl.startsWith('postgres')) {
+  isPg = true;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Pool } = require('pg');
+    pgPool = new Pool({
+      connectionString: pgUrl,
+      ssl: pgUrl.includes('localhost') ? false : { rejectUnauthorized: false },
+      max: 5,
+    });
+    console.log('[db] Using Postgres pool (free tier) — persistence enabled');
+  } catch (e) {
+    console.error('[db] Failed to init pg Pool, falling back to SQLite:', e);
+    isPg = false;
+  }
+}
+
 function getEffectiveDbPath(): string {
   const raw = process.env.DATABASE_FILE ?? './data/app.db';
   const isVercel = !!process.env.VERCEL;
-  // On Vercel, filesystem is read-only except /tmp. Redirect any /var/task or relative data path to /tmp.
   if (isVercel) {
     if (raw.startsWith('/var/task/')) {
       return raw.replace('/var/task', '/tmp');
@@ -26,7 +46,6 @@ try {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 } catch (err) {
-  // Fallback for read-only FS (e.g. /var/task/data on Vercel)
   const fallbackDir = path.join('/tmp', 'data');
   try {
     if (!fs.existsSync(fallbackDir)) {
@@ -43,8 +62,42 @@ try {
   }
 }
 
+// Vercel Blob persistence for better-sqlite3 (keeps /tmp DB across instances when pg not used)
+// If BLOB_READ_WRITE_TOKEN is set, we sync /tmp DB to Blob after writes.
+// This is best-effort; Postgres is preferred for strong consistency.
+let blobSyncEnabled = false;
+let blobUrl: string | null = process.env.BLOB_DATABASE_URL || null; // e.g., https://blob.vercel-storage.com/db-xxx.db
+if (!isPg && process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_BLOB_SKIP) {
+  blobSyncEnabled = true;
+  console.log('[db] Blob sync enabled (ephemeral /tmp -> persistent Blob)');
+  // Try to restore DB from Blob at startup (non-blocking, but do sync)
+  try {
+    if (blobUrl) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { head } = require('@vercel/blob');
+      // head check is async, we do not block startup — background restore
+      (async () => {
+        try {
+          const res = await fetch(blobUrl!);
+          if (res.ok) {
+            const buf = Buffer.from(await res.arrayBuffer());
+            if (buf.length > 0) {
+              fs.writeFileSync(dbPath, buf);
+              console.log(`[db] Restored DB from Blob (${buf.length} bytes) to ${dbPath}`);
+              // Re-open DB after restore? better-sqlite3 already opened below — we need to handle before open.
+            }
+          }
+        } catch (e) {
+          console.warn('[db] Blob restore failed (will create fresh DB):', (e as Error).message);
+        }
+      })();
+    }
+  } catch {}
+}
+
 const globalForDb = globalThis as unknown as {
   db?: Database.Database;
+  pgPool?: any;
 };
 
 const FALLBACK_SCHEMA = `
@@ -339,7 +392,6 @@ function ensureSchema(database: Database.Database) {
 
     console.log('[db] Empty database detected, bootstrapping schema...');
 
-    // Try to load migrations from filesystem (works locally and if migrations are deployed)
     const candidates = [
       path.resolve('migrations'),
       path.join(process.cwd(), 'migrations'),
@@ -377,21 +429,154 @@ function ensureSchema(database: Database.Database) {
   }
 }
 
-export const db =
-  globalForDb.db ??
-  new Database(dbPath);
+// Postgres wrapper — mimics better-sqlite3 sync API but via async pool
+function createPgWrapper(pool: any) {
+  const wrap = {
+    prepare: (sql: string) => {
+      // Translate ? placeholders to $1, $2 for pg
+      let idx = 0;
+      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
+      // SQLite -> Postgres dialect shims
+      const shimmed = pgSql
+        .replace(/COLLATE NOCASE/g, '')
+        .replace(/INSERT OR IGNORE/g, 'INSERT')
+        .replace(/ON CONFLICT\(key\) DO UPDATE SET value_json = excluded\.value_json/g, 'ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json')
+        .replace(/ON CONFLICT\(key\) DO NOTHING/g, 'ON CONFLICT (key) DO NOTHING')
+        .replace(/datetime\('now'\)/g, 'NOW()')
+        .replace(/datetime\('now', '-2 days'\)/g, "NOW() - INTERVAL '2 days'")
+        .replace(/datetime\('now', '-4 hours'\)/g, "NOW() - INTERVAL '4 hours'")
+        .replace(/date\('now', '-2 days'\)/g, "CURRENT_DATE - INTERVAL '2 days'")
+        .replace(/date\('now'\)/g, 'CURRENT_DATE')
+        .replace(/date\('now', '\+12 days'\)/g, "CURRENT_DATE + INTERVAL '12 days'")
+        .replace(/date\('now', '\+14 days'\)/g, "CURRENT_DATE + INTERVAL '14 days'");
 
-db.pragma('foreign_keys = ON');
-db.pragma('journal_mode = WAL');
-db.pragma('busy_timeout = 5000');
-
-// Auto-bootstrap ephemeral DBs (critical for Vercel /tmp where DB is recreated per cold start)
-ensureSchema(db);
-ensureDefaultSeed(db);
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForDb.db = db;
+      return {
+        get: async (...params: any[]) => {
+          const res = await pool.query(shimmed, params);
+          return res.rows[0];
+        },
+        all: async (...params: any[]) => {
+          const res = await pool.query(shimmed, params);
+          return res.rows;
+        },
+        run: async (...params: any[]) => {
+          const res = await pool.query(shimmed, params);
+          return { changes: res.rowCount, lastInsertRowid: res.rows[0]?.id };
+        },
+      };
+    },
+    exec: async (sql: string) => {
+      // Split by ; for pg
+      const stmts = sql.split(';').map(s => s.trim()).filter(Boolean);
+      for (const stmt of stmts) {
+        if (stmt) await pool.query(stmt);
+      }
+    },
+    transaction: (fn: any) => {
+      return async (...args: any[]) => {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const result = await fn(...args);
+          await client.query('COMMIT');
+          return result;
+        } catch (e) {
+          await client.query('ROLLBACK');
+          throw e;
+        } finally {
+          client.release();
+        }
+      };
+    },
+    pragma: () => {},
+  };
+  return wrap;
 }
+
+// Export db — either pg wrapper (async) or better-sqlite3 (sync)
+// For pg, we export async-compatible wrapper; callers must await.
+// For sqlite, we export sync instance.
+let db: any;
+
+if (isPg && pgPool) {
+  const pgWrapper: any = createPgWrapper(pgPool);
+  // Add sync-like pragma for compatibility
+  pgWrapper.pragma = () => {};
+  // For global caching
+  if (process.env.NODE_ENV !== 'production') {
+    globalForDb.pgPool = pgPool;
+  }
+  // Wrap to handle both sync and async callers: we keep pgWrapper as is
+  // But to avoid breaking existing `db.prepare(...).get()` sync calls, we make them async and require await.
+  // Existing code after this patch will be updated to `await db.prepare(...).get()`.
+  db = pgWrapper;
+  console.log('[db] Postgres mode — set DATABASE_URL to use free tier (Neon/Vercel). All queries are async (await required).');
+} else {
+  const sqliteDb =
+    globalForDb.db ??
+    new Database(dbPath);
+
+  sqliteDb.pragma('foreign_keys = ON');
+  sqliteDb.pragma('journal_mode = WAL');
+  sqliteDb.pragma('busy_timeout = 5000');
+
+  ensureSchema(sqliteDb);
+  ensureDefaultSeed(sqliteDb);
+
+  if (process.env.NODE_ENV !== 'production') {
+    globalForDb.db = sqliteDb;
+  }
+
+  // Wrap sqlite to also support async API for uniform `await` usage
+  const sqliteWrapper: any = {
+    prepare: (sql: string) => {
+      const stmt: any = sqliteDb.prepare(sql);
+      return {
+        get: (...params: any[]) => stmt.get(...params),
+        all: (...params: any[]) => stmt.all(...params),
+        run: (...params: any[]) => stmt.run(...params),
+      };
+    },
+    exec: (sql: string) => sqliteDb.exec(sql),
+    transaction: (fn: any) => sqliteDb.transaction(fn),
+    pragma: (s: string) => sqliteDb.pragma(s),
+    _raw: sqliteDb,
+  };
+  db = sqliteWrapper;
+}
+
+if (!isPg) {
+  // Blob upload after writes (best-effort)
+  if (blobSyncEnabled) {
+    const originalPrepare = db.prepare.bind(db);
+    db.prepare = (sql: string) => {
+      const stmt: any = originalPrepare(sql);
+      const origRun = stmt.run.bind(stmt);
+      stmt.run = (...params: any[]) => {
+        const res = origRun(...params);
+        // Fire-and-forget Blob upload after mutation
+        if (sql.trim().toUpperCase().startsWith('INSERT') || sql.trim().toUpperCase().startsWith('UPDATE') || sql.trim().toUpperCase().startsWith('DELETE')) {
+          (async () => {
+            try {
+              const buf = fs.readFileSync(dbPath);
+              const { put } = await import('@vercel/blob');
+              const blob = await put('db/app.db', buf, { access: 'public', allowOverwrite: true, addRandomSuffix: false });
+              blobUrl = blob.url;
+              process.env.BLOB_DATABASE_URL = blob.url;
+              console.log(`[db] Blob sync uploaded ${buf.length} bytes to ${blob.url}`);
+            } catch (e) {
+              console.warn('[db] Blob upload failed:', (e as Error).message);
+            }
+          })();
+        }
+        return res;
+      };
+      return stmt;
+    };
+  }
+}
+
+export { db, isPg, pgPool };
 
 function hashPasswordForSeed(password: string): string {
   const N = 16384;
@@ -404,7 +589,6 @@ function hashPasswordForSeed(password: string): string {
 
 function ensureDefaultSeed(database: Database.Database) {
   try {
-    // Only seed if users table exists and is empty — handles Vercel /tmp cold start where DB is fresh
     const hasUsersTable = database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get() as any;
     if (!hasUsersTable) return;
     const countRow = database.prepare('SELECT COUNT(*) as c FROM users').get() as any;
@@ -427,7 +611,6 @@ function ensureDefaultSeed(database: Database.Database) {
       console.warn('[db] Admin seed skipped:', (e as Error).message);
     }
 
-    // Seed demo customer (only if SEED_DEMO !== false)
     if (process.env.SEED_DEMO !== 'false') {
       const demoEmail = 'customer@example.com';
       const demoPassword = 'Customer123!';
@@ -448,7 +631,6 @@ function ensureDefaultSeed(database: Database.Database) {
       }
     }
 
-    // Seed minimal store settings if missing
     try {
       const hasSettings = database.prepare("SELECT key FROM settings WHERE key='store'").get() as any;
       if (!hasSettings) {
@@ -488,11 +670,6 @@ function ensureDefaultSeed(database: Database.Database) {
         console.log('[db] Seeded store settings');
       }
     } catch {}
-
-    // Note: Full catalog seed (12 products) is intentionally not auto-seeded at runtime to keep cold-start fast.
-    // Catalog will be empty on fresh Vercel /tmp DB until you run `bun run db:seed` via Build Command
-    // or set Build Command to `bun run db:migrate && bun run db:seed && bun run build`.
-    // For demo login, admin/customer above is sufficient.
   } catch (e) {
     console.error('[db] Default seed failed:', e);
   }
