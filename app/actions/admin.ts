@@ -12,6 +12,7 @@ import { productSchema, variantSchema, categorySchema, couponSchema } from '@/li
 export interface AdminActionResponse {
   success: boolean;
   error?: string;
+  productId?: string;
 }
 
 // -------------------------------------------------------------
@@ -55,6 +56,7 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
     }
   }
 
+  let createdId = id || '';
   await db.transaction(async () => {
     if (id) {
       await db.prepare(`
@@ -89,12 +91,15 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
       }
 
       await logAudit(admin.id, 'create_product', 'product', newId, p);
+      createdId = newId;
     }
   })();
 
   revalidatePath('/admin/products');
   revalidatePath('/catalog');
-  return { success: true };
+  // Return the id so callers can deep-link to the variant editor:
+  // a product without SKUs is invisible in the storefront (catalog joins variants).
+  return { success: true, productId: createdId || undefined };
 }
 
 export async function adminDeleteProductAction(productId: string): Promise<AdminActionResponse> {

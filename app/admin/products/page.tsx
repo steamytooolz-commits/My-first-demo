@@ -100,7 +100,14 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
                 </td>
                 <td className="py-3 px-4 text-slate-600">{p.category_name || '—'}</td>
                 <td className="py-3 px-4 text-slate-600">{p.brand || '—'}</td>
-                <td className="py-3 px-4 text-center font-medium text-slate-700">{p.variant_count}</td>
+                <td className="py-3 px-4 text-center font-medium text-slate-700">
+                  {p.variant_count}
+                  {p.variant_count === 0 && (
+                    <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900" title="Products without SKUs are hidden from the storefront">
+                      hidden
+                    </span>
+                  )}
+                </td>
                 <td className="py-3 px-4 text-center">
                   <span className={`inline-block font-mono font-bold text-xs px-2 py-0.5 rounded ${p.total_stock === 0 ? 'bg-rose-100 text-rose-800' : p.total_stock <= 5 ? 'bg-amber-100 text-amber-800' : 'text-slate-800'}`}>
                     {p.total_stock}

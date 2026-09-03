@@ -26,7 +26,9 @@ export default async function AdminNewProductPage() {
           'use server';
           const res = await adminSaveProductAction(null, formData);
           if (res?.success) {
-            redirect('/admin/products');
+            // New products have no SKUs yet and are invisible in the store
+            // until a variant is added — land directly on the variant editor.
+            redirect(res.productId ? `/admin/products/${res.productId}` : '/admin/products');
           }
         }} className="space-y-4 text-xs">
           <div>
