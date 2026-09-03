@@ -571,7 +571,7 @@ if (isTurso) {
   db = sqliteWrapper;
 }
 
-export { db, isPg, pgPool };
+export { db };
 
 function hashPasswordForSeed(password: string): string {
   const N = 16384;
