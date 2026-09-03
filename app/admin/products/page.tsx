@@ -50,13 +50,21 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
           <p className="text-xs text-slate-500 mt-1">Manage catalog stationery, variants, SKUs, and stock allocations.</p>
         </div>
 
-        <Link
-          href="/admin/products/new"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-teal-800 px-4 py-2.5 text-xs font-semibold text-white shadow hover:bg-teal-900 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Create New Product</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/products/import"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+          >
+            <span>Import CSV</span>
+          </Link>
+          <Link
+            href="/admin/products/new"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-teal-800 px-4 py-2.5 text-xs font-semibold text-white shadow hover:bg-teal-900 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Create New Product</span>
+          </Link>
+        </div>
       </div>
 
       {/* Filter toolbar */}

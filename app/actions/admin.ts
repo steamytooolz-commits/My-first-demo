@@ -8,6 +8,7 @@ import { logAudit } from '@/lib/audit';
 import { updateStoreSettings } from '@/lib/settings';
 import { processErasure } from '@/lib/privacy';
 import { productSchema, variantSchema, categorySchema, couponSchema } from '@/lib/validation';
+import { parseCsv, suggestMapping, executeProductImport } from '@/lib/csv-import';
 
 export interface AdminActionResponse {
   success: boolean;
@@ -531,6 +532,74 @@ export async function adminToggleUserStatusAction(userId: string): Promise<Admin
   await logAudit(admin.id, 'toggle_user_status', 'user', userId);
   revalidatePath('/admin/customers');
   return { success: true };
+}
+
+// -------------------------------------------------------------
+// Batch CSV catalogue import (two-step: analyze -> confirm)
+// -------------------------------------------------------------
+export interface ImportAnalysisResponse {
+  success: boolean;
+  error?: string;
+  headers?: string[];
+  mapping?: Record<number, string>;
+  samples?: Array<Record<string, string>>;
+  rowCount?: number;
+  delimiterLabel?: string;
+  truncated?: boolean;
+  warnings?: string[];
+}
+
+export async function analyzeProductImportAction(prevState: any, formData: FormData): Promise<ImportAnalysisResponse> {
+  await requireAdmin();
+  const csvText = String(formData.get('csvText') || '');
+  if (!csvText.trim()) {
+    return { success: false, error: 'Upload a CSV file first.' };
+  }
+  const parsed = parseCsv(csvText);
+  if (parsed.headers.length === 0) {
+    return { success: false, error: 'No header row found. The first row must contain column names.' };
+  }
+  const { mapping, warnings } = suggestMapping(parsed.headers);
+  const samples = parsed.rows.slice(0, 5).map(cells =>
+    Object.fromEntries(parsed.headers.map((h, i) => [h, cells[i] ?? '']))
+  );
+  const delimiterLabel = parsed.delimiter === '\t' ? 'tab' : parsed.delimiter === ' ' ? 'space' : `“${parsed.delimiter}”`;
+  return {
+    success: true,
+    headers: parsed.headers,
+    mapping,
+    samples,
+    rowCount: parsed.rows.length,
+    delimiterLabel,
+    truncated: parsed.truncated,
+    warnings,
+  };
+}
+
+export async function executeProductImportAction(prevState: any, formData: FormData): Promise<AdminActionResponse & { summary?: any }> {
+  const admin = await requireAdmin();
+  const csvText = String(formData.get('csvText') || '');
+  let mapping: Record<string | number, string> = {};
+  try {
+    mapping = JSON.parse(String(formData.get('mapping') || '{}'));
+  } catch {
+    return { success: false, error: 'Import mapping is invalid. Re-analyze the file.' };
+  }
+  if (!csvText.trim()) {
+    return { success: false, error: 'Upload a CSV file first.' };
+  }
+  const parsed = parseCsv(csvText);
+  if (parsed.headers.length === 0) {
+    return { success: false, error: 'No header row found.' };
+  }
+  const result = await executeProductImport(parsed.headers, parsed.rows, mapping, admin.id);
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+  revalidatePath('/admin/products');
+  revalidatePath('/catalog');
+  revalidatePath('/', 'layout');
+  return { success: true, summary: result.summary };
 }
 
 // -------------------------------------------------------------

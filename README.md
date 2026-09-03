@@ -15,7 +15,7 @@
 - **Cart & Checkout** — guest + authenticated carts, coupon codes, weight-based shipping (`pickup`/`standard`/`express`), VAT-inclusive tax math
 - **Payment simulation** — `sim_card` (success/declined/pending), `manual_eft` (bank details + admin verification), `pay_on_delivery` — no external gateway
 - **Customer portal** — orders, invoices, addresses, profile, security, POPIA privacy (`/account/*`, `/api/account/export`)
-- **Admin** — dashboard, products/variants, categories, orders, invoices, coupons, customers/POPIA, audit logs, settings (`/admin/*`)
+- **Admin** — dashboard, products/variants, CSV catalogue import (`/admin/products/import`), categories, orders, invoices, coupons, customers/POPIA, audit logs, settings, one-click maintenance (`/admin/*`)
 - **Invoicing** — sequential `INV-YYYY-NNNNNN` / `ORD-YYYY-NNNNNN` via `sequences`, SARS-compliant VAT, seller/buyer snapshots, print view
 - **Compliance** — POPIA consent, 7-day erasure grace, anonymization while retaining 5-year tax invoices (`lib/privacy.ts`)
 
