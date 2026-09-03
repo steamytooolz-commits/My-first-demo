@@ -33,9 +33,14 @@ describe('seed catalogue data', () => {
   });
 
   it('ships a placeholder image file for every product', () => {
+    const dir = path.join(root, 'public', 'seed');
+    const available = fs.existsSync(dir) ? fs.readdirSync(dir).sort() : [];
     for (const p of SEED_PRODUCTS) {
-      const file = path.join(root, 'public', p.image.replace(/^\/seed\//, ''));
-      expect(fs.existsSync(file), `missing ${p.image}`).toBe(true);
+      const file = path.join(dir, p.image.replace(/^\/seed\//, ''));
+      expect(
+        fs.existsSync(file),
+        `missing ${p.image} (root=${root}, have: ${available.join(',') || 'none'})`
+      ).toBe(true);
     }
   });
 
