@@ -52,7 +52,7 @@ cp .env.example .env
 
 # 3. DB
 bun run db:migrate   # applies migrations/001_init.sql
-bun run db:seed      # store settings + admin/customer + 12 products/18 variants + coupons + 2 demo orders
+bun run db:seed      # store settings + admin/customer + 15 products/21 variants + coupons + 2 demo orders
 
 # 4. Dev
 bun run dev          # http://localhost:3000

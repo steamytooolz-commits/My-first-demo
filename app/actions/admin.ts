@@ -527,3 +527,18 @@ export async function adminToggleUserStatusAction(userId: string): Promise<Admin
   revalidatePath('/admin/customers');
   return { success: true };
 }
+
+// -------------------------------------------------------------
+// Staging Maintenance (JP Freelance lock — deterministic, no Cron)
+// -------------------------------------------------------------
+export async function adminRunMaintenanceAction(): Promise<AdminActionResponse & { detail?: string }> {
+  const admin = await requireAdmin();
+  const { runAllMaintenance } = await import('@/lib/maintenance');
+  const result = await runAllMaintenance();
+  await logAudit(admin.id, 'run_maintenance', 'system', 'staging', result as any);
+  revalidatePath('/admin');
+  return {
+    success: true,
+    detail: `Abandoned ${result.abandoned} carts, expired ${result.expired} orders, processed ${result.processed} erasures.`,
+  };
+}

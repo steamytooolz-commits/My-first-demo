@@ -191,7 +191,7 @@ DB is ephemeral, so rollback does not affect `/tmp` data.
 
 - Repo: `https://github.com/steamytooolz-commits/My-first-demo`
 - Vercel Project: `my-first-demo-main` (`prj_bRlZYQh5lFbUhl19jgOiKyeX1ej4`, team `jordan-ad2c`)
-- Seed: `scripts/seed.mjs` (12 products, 18 variants, `WELCOME10` etc.)
+- Seed: `scripts/seed.mjs` (15 products, 21 variants, `WELCOME10` etc.)
 - Compliance: `ASSUMPTIONS.md`
 - Vercel Logs doc: `https://vercel.com/docs/logs/runtime`
 

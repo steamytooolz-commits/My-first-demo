@@ -3,30 +3,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Postgres support (free tier via Vercel/Neon)
-let pgPool: any = null;
+// VPS/SQLite-only staging lock (JP Freelance 48h SLA)
+// No Postgres, no Blob — deterministic better-sqlite3 singleton on persistent volume.
+// If DATABASE_URL is set it is intentionally ignored in this lock.
+// isPg/pgPool kept as compatibility exports so existing `import { db, isPg }` call sites keep working.
 let isPg = false;
-const pgUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL;
-if (pgUrl && pgUrl.startsWith('postgres')) {
-  isPg = true;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { Pool } = require('pg');
-    pgPool = new Pool({
-      connectionString: pgUrl,
-      ssl: pgUrl.includes('localhost') ? false : { rejectUnauthorized: false },
-      max: 5,
-      connectionTimeoutMillis: 5000,
-      idleTimeoutMillis: 10000,
-      query_timeout: 5000,
-      statement_timeout: 5000,
-    });
-    console.log('[db] Using Postgres pool (free tier) — persistence enabled');
-  } catch (e) {
-    console.error('[db] Failed to init pg Pool, falling back to SQLite:', e);
-    isPg = false;
-  }
-}
+const pgPool: any = null;
 
 function getEffectiveDbPath(): string {
   const raw = process.env.DATABASE_FILE ?? './data/app.db';
@@ -64,39 +46,6 @@ try {
   } catch (fallbackErr) {
     console.error('[db] Failed to create fallback data dir', fallbackErr);
   }
-}
-
-// Vercel Blob persistence for better-sqlite3 (keeps /tmp DB across instances when pg not used)
-// If BLOB_READ_WRITE_TOKEN is set, we sync /tmp DB to Blob after writes.
-// This is best-effort; Postgres is preferred for strong consistency.
-let blobSyncEnabled = false;
-let blobUrl: string | null = process.env.BLOB_DATABASE_URL || null; // e.g., https://blob.vercel-storage.com/db-xxx.db
-if (!isPg && process.env.BLOB_READ_WRITE_TOKEN && !process.env.VERCEL_BLOB_SKIP) {
-  blobSyncEnabled = true;
-  console.log('[db] Blob sync enabled (ephemeral /tmp -> persistent Blob)');
-  // Try to restore DB from Blob at startup (non-blocking, but do sync)
-  try {
-    if (blobUrl) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { head } = require('@vercel/blob');
-      // head check is async, we do not block startup — background restore
-      (async () => {
-        try {
-          const res = await fetch(blobUrl!);
-          if (res.ok) {
-            const buf = Buffer.from(await res.arrayBuffer());
-            if (buf.length > 0) {
-              fs.writeFileSync(dbPath, buf);
-              console.log(`[db] Restored DB from Blob (${buf.length} bytes) to ${dbPath}`);
-              // Re-open DB after restore? better-sqlite3 already opened below — we need to handle before open.
-            }
-          }
-        } catch (e) {
-          console.warn('[db] Blob restore failed (will create fresh DB):', (e as Error).message);
-        }
-      })();
-    }
-  } catch {}
 }
 
 const globalForDb = globalThis as unknown as {
@@ -677,37 +626,6 @@ if (isPg && pgPool) {
     _raw: sqliteDb,
   };
   db = sqliteWrapper;
-}
-
-if (!isPg) {
-  // Blob upload after writes (best-effort)
-  if (blobSyncEnabled) {
-    const originalPrepare = db.prepare.bind(db);
-    db.prepare = (sql: string) => {
-      const stmt: any = originalPrepare(sql);
-      const origRun = stmt.run.bind(stmt);
-      stmt.run = (...params: any[]) => {
-        const res = origRun(...params);
-        // Fire-and-forget Blob upload after mutation
-        if (sql.trim().toUpperCase().startsWith('INSERT') || sql.trim().toUpperCase().startsWith('UPDATE') || sql.trim().toUpperCase().startsWith('DELETE')) {
-          (async () => {
-            try {
-              const buf = fs.readFileSync(dbPath);
-              const { put } = await import('@vercel/blob');
-              const blob = await put('db/app.db', buf, { access: 'public', allowOverwrite: true, addRandomSuffix: false });
-              blobUrl = blob.url;
-              process.env.BLOB_DATABASE_URL = blob.url;
-              console.log(`[db] Blob sync uploaded ${buf.length} bytes to ${blob.url}`);
-            } catch (e) {
-              console.warn('[db] Blob upload failed:', (e as Error).message);
-            }
-          })();
-        }
-        return res;
-      };
-      return stmt;
-    };
-  }
 }
 
 export { db, isPg, pgPool };

@@ -215,7 +215,7 @@ for (const cat of categories) {
 }
 console.log(`[seed] Categories populated (${categories.length} total).`);
 
-// Seed Products and Variants (12 products, 18 variants total, including low stock & out-of-stock)
+// Seed Products and Variants (15 products, 21 variants total, including low stock & out-of-stock)
 const productsData = [
   {
     name: 'A4 Hardcover Executive Notebook',
@@ -364,6 +364,42 @@ const productsData = [
     image: generateSvgPlaceholder('desk-organizer.svg', 'Wood Desk Organizer', '#78350F', '📐'),
     variants: [
       { sku: 'OFF-ORG-NAT', name: 'Natural Honey Pine', price_cents: 34500, compare_at_price_cents: 39500, cost_cents: 16000, stock_qty: 15, low_stock_threshold: 3, weight_g: 720 },
+    ]
+  },
+  {
+    name: 'Leather A6 Pocket Notebook',
+    slug: 'leather-a6-pocket-notebook',
+    category: 'notebooks-pads',
+    brand: 'Kalahari Paper Co.',
+    description: 'Full-grain bovine leather cover with 160 pages of 90gsm cream paper. Fits jacket pocket for field notes across South Africa.',
+    featured: 0,
+    image: generateSvgPlaceholder('pocket-notebook.svg', 'Leather Pocket Notebook', '#7C2D12', '📔'),
+    variants: [
+      { sku: 'NB-A6-TAN', name: 'Cognac Tan Leather', price_cents: 16500, compare_at_price_cents: 19500, cost_cents: 8000, stock_qty: 38, low_stock_threshold: 5, weight_g: 210 },
+    ]
+  },
+  {
+    name: 'Stainless Steel Ruler & Geometry Set',
+    slug: 'steel-ruler-geometry-set',
+    category: 'school-essentials',
+    brand: 'Matrico Instruments',
+    description: '30cm stainless ruler, 180-degree protractor, and set squares in a tin. SABS-approved for matric examinations.',
+    featured: 0,
+    image: generateSvgPlaceholder('geometry-set.svg', 'Geometry Set', '#0E7490', '📏'),
+    variants: [
+      { sku: 'SCH-GEO-SET', name: 'Standard 4-Piece Set', price_cents: 9500, compare_at_price_cents: null, cost_cents: 4200, stock_qty: 70, low_stock_threshold: 10, weight_g: 180 },
+    ]
+  },
+  {
+    name: 'Archival Ballpoint Pen 3-Pack',
+    slug: 'archival-ballpoint-3-pack',
+    category: 'pens-writing',
+    brand: 'Cape Quill Co.',
+    description: '1.0mm oil-based archival ink,635m write-out length per pen. SARS document-safe for signing tax invoices and contracts.',
+    featured: 0,
+    image: generateSvgPlaceholder('ballpoints.svg', 'Ballpoint 3-Pack', '#1D4ED8', '🖊️'),
+    variants: [
+      { sku: 'PEN-BALL-3BLK', name: 'Black Ink (3-Pack)', price_cents: 8900, compare_at_price_cents: 10500, cost_cents: 3800, stock_qty: 110, low_stock_threshold: 15, weight_g: 60 },
     ]
   },
 ];

@@ -95,6 +95,21 @@ export default async function CustomerPrivacyPage() {
               />
             </div>
 
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Confirm Password (Required)
+              </label>
+              <input
+                type="password"
+                name="password"
+                required
+                autoComplete="current-password"
+                placeholder="Enter your password to confirm"
+                className="w-full rounded-lg border border-slate-200 p-2 focus:border-rose-700 focus:outline-none"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">Secondary confirmation required before scheduling erasure.</p>
+            </div>
+
             <button
               type="submit"
               className="rounded-xl bg-rose-700 px-4 py-2.5 font-semibold text-white shadow hover:bg-rose-800 transition-colors flex items-center gap-2"

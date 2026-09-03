@@ -67,6 +67,18 @@ export default async function AdminDashboardPage() {
             <Download className="h-4 w-4 text-slate-500" />
             <span>Export Orders CSV</span>
           </a>
+          <form action={async () => {
+            'use server';
+            const { adminRunMaintenanceAction } = await import('@/app/actions/admin');
+            await adminRunMaintenanceAction();
+          }}>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 shadow-sm hover:bg-amber-100 transition-colors"
+            >
+              <span>Run Maintenance</span>
+            </button>
+          </form>
         </div>
       </div>
 
