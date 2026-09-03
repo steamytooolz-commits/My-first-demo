@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { SEED_PRODUCTS, SEED_CATEGORIES, SEED_COUPONS } from '../lib/seed-data';
 
-const root = path.resolve(__dirname, '..');
+// process.cwd() is the repo root when running `bun run test` / `vitest run`
+// (more reliable than __dirname under vitest's ESM transform).
+const root = process.cwd();
 
 describe('seed catalogue data', () => {
   it('contains 15 products across 5 categories', () => {
