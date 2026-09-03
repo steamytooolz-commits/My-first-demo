@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createClient as createLibsqlClient } from '@libsql/client';
+import { seedCatalogIfEmpty } from './seed-catalog';
 
 // Staging persistence (JP Freelance 48h SLA):
 // - Turso (LibSQL, edge SQLite) when TURSO_DATABASE_URL is set — shared persistence on Vercel.
@@ -499,23 +500,15 @@ if (isTurso) {
       await q(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`, [JSON.stringify({
         store_name: 'Paper & Quill Stationery', contact_email: 'hello@paperandquill.co.za', phone: '', address_line1: '42 Bram Fischer Drive', address_line2: 'Ferndale', city: 'Johannesburg', province: 'Gauteng', postal_code: '2194', country: 'ZA', currency: 'ZAR', tax_enabled: false, tax_rate_percent: 0, prices_include_tax: true, shipping_taxable: true, free_shipping_enabled: true, free_shipping_threshold_cents: 95000, standard_base_cents: 7500, express_base_cents: 15000, weight_threshold_g: 5000, weight_surcharge_cents: 2500, express_weight_surcharge_cents: 5000, invoice_prefix: 'INV', order_prefix: 'ORD', invoice_due_days: 14, bank_name: 'First National Bank', bank_account_name: 'Paper & Quill Stationery (Pty) Ltd', bank_account_number: '62000000000', bank_branch_code: '250655', bank_reference_note: 'Please use your Order Number as payment reference', vat_number: ''
       })]);
-      const catCount = (await q('SELECT COUNT(*) as c FROM categories')).rows[0] as any;
-      const cc = parseInt(catCount?.c ?? 0, 10);
-      if (cc === 0) {
-        const cats = [
-          { id: '11111111-1111-4000-8000-000000000001', name: 'Pens & Writing', slug: 'pens-writing' },
-          { id: '11111111-1111-4000-8000-000000000002', name: 'Notebooks & Pads', slug: 'notebooks-pads' },
-          { id: '11111111-1111-4000-8000-000000000003', name: 'Office Supplies', slug: 'office-supplies' },
-          { id: '11111111-1111-4000-8000-000000000004', name: 'Art Supplies', slug: 'art-supplies' },
-          { id: '11111111-1111-4000-8000-000000000005', name: 'School Essentials', slug: 'school-essentials' },
-        ];
-        for (const cat of cats) {
-          await q(`INSERT INTO categories (id, name, slug, description, active, sort_order) VALUES (?, ?, ?, '', 1, ?) ON CONFLICT(id) DO NOTHING`, [cat.id, cat.name, cat.slug, cats.indexOf(cat) + 1]);
-        }
-        console.log('[db] Turso seeded categories (5)');
-      }
       console.log('[db] Turso seeded admin/customer');
     }
+    // Full catalogue auto-seed, independent of the user block above: guarantees the
+    // storefront can never stay empty (existing DBs with users but no products seed too).
+    const catalog = await seedCatalogIfEmpty({
+      get: async (sql: string, ...params: any[]) => (await q(sql, params)).rows[0],
+      run: async (sql: string, ...params: any[]) => { await q(sql, params); },
+    });
+    if (catalog.seeded) console.log(`[db] Turso seeded catalogue (${catalog.products} products)`);
   })();
   tursoReady = Promise.race([
     bootstrapTurso,
