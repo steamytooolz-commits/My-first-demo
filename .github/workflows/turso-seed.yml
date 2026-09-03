@@ -1,0 +1,63 @@
+name: Turso Seed
+
+# Manual staging seed for the Turso (LibSQL) database.
+# Android-friendly: no local bun needed — runs entirely on GitHub.
+#
+# 1. GitHub repo → Settings → Secrets and variables → Actions → add:
+#      TURSO_DATABASE_URL = libsql://staging-paper-quill-[org].turso.io
+#      TURSO_AUTH_TOKEN   = (from: turso db tokens create staging-paper-quill)
+# 2. Actions tab → "Turso Seed" → Run workflow.
+# 3. Redeploy Vercel (or wait for auto-deploy) and check /catalog.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Check Turso secrets
+        run: |
+          test -n "${{ secrets.TURSO_DATABASE_URL }}" || (echo "Missing secret TURSO_DATABASE_URL (repo Settings → Secrets and variables → Actions)" && exit 1)
+          test -n "${{ secrets.TURSO_AUTH_TOKEN }}" || (echo "Missing secret TURSO_AUTH_TOKEN (repo Settings → Secrets and variables → Actions)" && exit 1)
+          echo "Turso secrets present"
+
+      - name: Migrate Turso schema
+        run: bun run db:migrate:turso
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+      - name: Seed Turso catalog (15 products)
+        run: bun run db:seed:turso
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          SEED_DEMO: "true"
+          ADMIN_EMAIL: admin@example.com
+          ADMIN_PASSWORD: ChangeMe123!
+
+      - name: Verify seed counts
+        run: |
+          TURSO_DATABASE_URL="${{ secrets.TURSO_DATABASE_URL }}" TURSO_AUTH_TOKEN="${{ secrets.TURSO_AUTH_TOKEN }}" node -e "
+            import('@libsql/client').then(async ({ createClient }) => {
+              const client = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+              const products = await client.execute('SELECT COUNT(*) as c FROM products');
+              const users = await client.execute('SELECT COUNT(*) as c FROM users');
+              console.log('turso staging products=' + products.rows[0].c + ' users=' + users.rows[0].c);
+              if (products.rows[0].c < 15) throw new Error('Expected >=15 products');
+              console.log('Turso staging seed verified — check /catalog on Vercel');
+            });
+          "
