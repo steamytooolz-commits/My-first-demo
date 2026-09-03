@@ -100,10 +100,41 @@ function ensureSchema(db) {
 
 | Option | When to Use | How |
 |--------|-------------|-----|
-| **Ephemeral `/tmp` (default)** | Demo / staging (current) | No extra config. Data lost on cold start. Good for `ENOENT` fix verification. |
-| **Vercel Postgres / Neon / Turso** | Production (recommended) | Set `DATABASE_FILE` to `libsql://...` or `postgres://...` **and** migrate `lib/db.ts` to `@libsql/client` or `pg` (currently `better-sqlite3` only). Or use Vercel Blob + `libsql` HTTP. Requires code change. |
-| **Build-time seed** | Demo with data | Keep `DATABASE_FILE=/tmp/data/app.db` but run `bun run db:seed` in Build Command. Data exists for build, but still ephemeral per function. Users will see products, but new orders will be lost on eviction — acceptable for simulated payments. |
-| **External SQLite on mount** | Self-hosted | Deploy on Fly.io/Render with volume mount at `/data` and keep `DATABASE_FILE=/data/app.db` (writable). No Vercel. |
+| **Turso (LibSQL edge SQLite)** | Vercel staging / production (recommended) | Same SQLite dialect, zero schema changes. Free tier at turso.tech. Set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` in Vercel env, then run `bun run db:migrate:turso && bun run db:seed:turso` once (see Turso setup below). `lib/db.ts` switches automatically. |
+| **SQLite file (`better-sqlite3`)** | VPS / local single-instance | Deterministic, no cloud needed. Keep `DATABASE_FILE=./data/app.db` (or `/data/app.db` volume mount on Fly.io/Render). Run `bun run db:migrate && bun run db:seed`. |
+| **Ephemeral `/tmp` (fallback)** | Emergency only | No config. Data lost on cold start. Only used on Vercel when `TURSO_DATABASE_URL` is unset. |
+
+### Turso setup (free tier, ~5 minutes)
+
+```bash
+# 1. Install CLI + sign up (browser login, free, no card)
+curl -sSfL https://get.tur.so/install.sh | bash
+turso auth signup
+
+# 2. Create staging database + token
+turso db create staging-paper-quill
+turso db show staging-paper-quill --url
+# -> libsql://staging-paper-quill-[org].turso.io
+turso db tokens create staging-paper-quill
+
+# 3. Bootstrap schema + catalog (same 15 products as local seed)
+TURSO_DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." bun run db:migrate:turso
+TURSO_DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..." bun run db:seed:turso
+
+# 4. Vercel → Project Settings → Environment Variables (Production):
+#      TURSO_DATABASE_URL="libsql://..."
+#      TURSO_AUTH_TOKEN="..."
+#    Redeploy. First request bootstraps + seeds admin/customer automatically;
+#    `POST /admin/products/new` then persists across all instances.
+```
+
+Local Turso check without cloud (same commands CI runs):
+
+```bash
+rm -f /tmp/turso-ci.db
+TURSO_DATABASE_URL="file:/tmp/turso-ci.db" bun run db:migrate:turso
+TURSO_DATABASE_URL="file:/tmp/turso-ci.db" bun run db:seed:turso
+```
 
 **Backup (`scripts/db-backup.mjs`):** WAL checkpoint → copy to `data/backups/backup-<iso>.db`. On Vercel, backup goes to `/tmp/data/backups` (also ephemeral).
 

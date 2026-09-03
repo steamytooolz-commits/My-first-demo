@@ -2,13 +2,16 @@ import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createClient as createLibsqlClient } from '@libsql/client';
 
-// VPS/SQLite-only staging lock (JP Freelance 48h SLA)
-// No Postgres, no Blob — deterministic better-sqlite3 singleton on persistent volume.
-// If DATABASE_URL is set it is intentionally ignored in this lock.
-// isPg/pgPool kept as compatibility exports so existing `import { db, isPg }` call sites keep working.
-let isPg = false;
-const pgPool: any = null;
+// Staging persistence (JP Freelance 48h SLA):
+// - Turso (LibSQL, edge SQLite) when TURSO_DATABASE_URL is set — shared persistence on Vercel.
+// - better-sqlite3 file when unset — deterministic single-file DB for VPS/local.
+// Same SQLite dialect both ways, so migrations/001_init.sql applies unchanged (zero schema changes).
+// isPg/pgPool kept as compatibility exports (always false/null) so existing imports keep working.
+export const isTurso = (process.env.TURSO_DATABASE_URL ?? '').length > 0;
+export const isPg = false;
+export const pgPool: any = null;
 
 function getEffectiveDbPath(): string {
   const raw = process.env.DATABASE_FILE ?? './data/app.db';
@@ -382,83 +385,67 @@ function ensureSchema(database: Database.Database) {
   }
 }
 
-let pgReady: Promise<void> | null = null;
+let tursoReady: Promise<void> | null = null;
 
-// Postgres wrapper — mimics better-sqlite3 sync API but via async pool
-function createPgWrapper(pool: any) {
-  let txClient: any = null;
+// Turso (LibSQL) wrapper — same prepare/get/all/run/exec/transaction shape as the
+// better-sqlite3 wrapper below, so all callers use `await db.prepare(...)` unchanged.
+// LibSQL speaks SQLite, so `?` placeholders, COLLATE NOCASE, datetime('now'),
+// INSERT OR IGNORE and ON CONFLICT all pass through with zero shims.
+function createLibsqlWrapper(client: any) {
+  let tx: any = null;
+  const execOn = (target: any) => async (sql: string) => {
+    const stmts = sql.split(';').map(s => s.trim()).filter(Boolean);
+    for (const stmt of stmts) {
+      if (stmt) await target.execute(stmt);
+    }
+  };
   const wrap = {
     prepare: (sql: string) => {
-      // Translate ? placeholders to $1, $2 for pg
-      let idx = 0;
-      const pgSql = sql.replace(/\?/g, () => `$${++idx}`);
-      // SQLite -> Postgres dialect shims — generic datetime -> NOW()
-      let shimmed = pgSql
-        .replace(/COLLATE NOCASE/g, '')
-        .replace(/INSERT OR IGNORE INTO sequences/g, 'INSERT INTO sequences')
-        .replace(/INSERT OR IGNORE/g, 'INSERT')
-        .replace(/ON CONFLICT\(key\) DO UPDATE SET value_json = excluded\.value_json/g, 'ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json')
-        .replace(/ON CONFLICT\(key\) DO NOTHING/g, 'ON CONFLICT (key) DO NOTHING')
-        .replace(/datetime\([^)]*\)/g, 'NOW()')
-        .replace(/date\('now', '\+12 days'\)/g, "CURRENT_DATE + INTERVAL '12 days'")
-        .replace(/date\('now', '\+14 days'\)/g, "CURRENT_DATE + INTERVAL '14 days'")
-        .replace(/date\('now', '-2 days'\)/g, "CURRENT_DATE - INTERVAL '2 days'")
-        .replace(/date\('now'\)/g, 'CURRENT_DATE');
-      // Handle INSERT OR IGNORE without explicit ON CONFLICT — add DO NOTHING for sequences/schema_migrations
-      if (shimmed.includes('INSERT INTO sequences') && !shimmed.includes('ON CONFLICT')) {
-        shimmed = shimmed.replace('INSERT INTO sequences', 'INSERT INTO sequences ON CONFLICT (kind, year) DO NOTHING');
-      }
-      if (shimmed.includes('INSERT INTO schema_migrations') && !shimmed.includes('ON CONFLICT')) {
-        shimmed = shimmed.replace('INSERT INTO schema_migrations', 'INSERT INTO schema_migrations ON CONFLICT (id) DO NOTHING');
-      }
-
-      const withPgReady = async (fn: () => Promise<any>) => {
-        if (pgReady) {
-          try { await pgReady; } catch (e) { console.warn('[db] pgReady wait failed in prepare:', (e as Error).message); }
+      const withReady = async (fn: () => Promise<any>) => {
+        if (tursoReady) {
+          try { await tursoReady; } catch (e) { console.warn('[db] tursoReady wait failed in prepare:', (e as Error).message); }
         }
         return fn();
       };
-
-      const queryFn = txClient ? txClient.query.bind(txClient) : pool.query.bind(pool);
-
+      const target = () => tx ?? client;
       return {
-        get: async (...params: any[]) => withPgReady(async () => {
-          const res = await queryFn(shimmed, params);
-          return res.rows[0];
+        get: async (...params: any[]) => withReady(async () => {
+          const res = await target().execute({ sql, args: params });
+          return (res.rows as any[])[0];
         }),
-        all: async (...params: any[]) => withPgReady(async () => {
-          const res = await queryFn(shimmed, params);
-          return res.rows;
+        all: async (...params: any[]) => withReady(async () => {
+          const res = await target().execute({ sql, args: params });
+          return res.rows as any[];
         }),
-        run: async (...params: any[]) => withPgReady(async () => {
-          const res = await queryFn(shimmed, params);
-          return { changes: res.rowCount, lastInsertRowid: res.rows[0]?.id };
+        run: async (...params: any[]) => withReady(async () => {
+          const res = await target().execute({ sql, args: params });
+          return { changes: Number(res.rowsAffected ?? 0), lastInsertRowid: res.lastInsertRowid };
         }),
       };
     },
     exec: async (sql: string) => {
-      // Split by ; for pg
-      const stmts = sql.split(';').map(s => s.trim()).filter(Boolean);
-      for (const stmt of stmts) {
-        if (stmt) await pool.query(stmt);
+      if (tursoReady) {
+        try { await tursoReady; } catch (e) { console.warn('[db] tursoReady wait failed in exec:', (e as Error).message); }
       }
+      await execOn(client)(sql);
     },
     transaction: (fn: any) => {
       return async (...args: any[]) => {
-        const client = await pool.connect();
-        const prevTx = txClient;
-        txClient = client;
+        if (typeof client.transaction !== 'function') {
+          return fn(...args);
+        }
+        const t = await client.transaction('write');
+        const prevTx = tx;
+        tx = t;
         try {
-          await client.query('BEGIN');
           const result = await fn(...args);
-          await client.query('COMMIT');
+          await t.commit();
           return result;
         } catch (e) {
-          try { await client.query('ROLLBACK'); } catch {}
+          try { await t.rollback(); } catch {}
           throw e;
         } finally {
-          txClient = prevTx;
-          client.release();
+          tx = prevTx;
         }
       };
     },
@@ -467,119 +454,75 @@ function createPgWrapper(pool: any) {
   return wrap;
 }
 
-// Export db — either pg wrapper (async) or better-sqlite3 (sync)
-// For pg, we export async-compatible wrapper; callers must await.
-// For sqlite, we export sync instance.
+// Export db - Turso (LibSQL edge SQLite) when TURSO_DATABASE_URL is set,
+// else better-sqlite3 file. Both expose async prepare/get/all/run/exec/transaction.
 let db: any;
 
-if (isPg && pgPool) {
-  const pgWrapper: any = createPgWrapper(pgPool);
-  pgWrapper.pragma = () => {};
-  if (process.env.NODE_ENV !== 'production') {
-    globalForDb.pgPool = pgPool;
-  }
-  db = pgWrapper;
-  console.log('[db] Postgres mode — set DATABASE_URL to use free tier (Neon/Vercel). All queries are async (await required).');
-  // Ensure schema for Postgres (blocking for first queries via pgReady) — 7s timeout to avoid Vercel 0-status hang (Neon cold start)
-  const bootstrapPg = (async () => {
-    try {
-      const hasUsers = await pgWrapper.prepare("SELECT table_name FROM information_schema.tables WHERE table_name='users'").get() as any;
-      if (!hasUsers) {
-        console.log('[db] Postgres empty, bootstrapping schema...');
-        // Use Postgres-specific schema (SQLite FALLBACK_SCHEMA shim may miss some PG syntax, so use direct pg exec)
-        const pgSchema = FALLBACK_SCHEMA
-          .replace(/COLLATE NOCASE/g, '')
-          .replace(/datetime\([^)]*\)/g, 'NOW()')
-          .replace(/date\('now'\)/g, 'CURRENT_DATE');
-        const stmts = pgSchema.split(';').map(s => s.trim()).filter(Boolean);
-        for (const stmt of stmts) {
-          try { await pgWrapper.exec(stmt); } catch (e) { console.warn('[db] PG schema stmt failed:', (e as Error).message.slice(0,300)); }
-        }
-        console.log('[db] Postgres schema bootstrapped');
+if (isTurso) {
+  const tursoClient = createLibsqlClient({
+    url: process.env.TURSO_DATABASE_URL as string,
+    authToken: process.env.TURSO_AUTH_TOKEN || undefined,
+  });
+  const turso: any = createLibsqlWrapper(tursoClient);
+  turso.pragma = () => {};
+  db = turso;
+  console.log('[db] Turso mode (LibSQL edge SQLite) - shared persistence enabled.');
+  // Bootstrap schema + seed on first connect. Uses the raw client (not the wrapper)
+  // so bootstrap never waits on itself. 20s cap; failures throw loudly with no
+  // silent SQLite fallback (split-brain across instances would be worse than a clear 500).
+  const bootstrapTurso = (async () => {
+    const q = (sql: string, args: any[] = []) => tursoClient.execute({ sql, args });
+    const hasUsers = (await q("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")).rows[0] as any;
+    if (!hasUsers) {
+      console.log('[db] Turso empty, bootstrapping schema...');
+      const stmts = FALLBACK_SCHEMA.split(';').map(s => s.trim()).filter(Boolean);
+      for (const stmt of stmts) {
+        try { await tursoClient.execute(stmt); } catch (e) { console.warn('[db] Turso schema stmt failed:', (e as Error).message.slice(0,300)); }
       }
-      // Seed admin/customer for Postgres as well
-      try {
-        const countRow = await pgWrapper.prepare('SELECT COUNT(*) as c FROM users').get() as any;
-        const c = parseInt(countRow?.c ?? countRow?.count ?? 0, 10);
-        if (c === 0) {
-          console.log('[db] Postgres no users, seeding...');
-          const adminEmail = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase();
-          const adminPassword = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
-          const adminId = '00000000-0000-4000-a000-000000000001';
-          const now = new Date().toISOString();
-          const hash = (p: string) => {
-            const salt = crypto.randomBytes(16).toString('hex');
-            const dk = crypto.scryptSync(p, salt, 64, { N: 16384, r: 8, p: 1 });
-            return `scrypt:16384:8:1:${salt}:${dk.toString('hex')}`;
-          };
-          await pgWrapper.prepare(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'System Administrator', '', 'admin', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`).run(adminId, adminEmail, hash(adminPassword), now, now, now);
-          await pgWrapper.prepare(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'Thabo Mokoena', '', 'customer', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`).run('00000000-0000-4000-a000-000000000002', 'customer@example.com', hash('Customer123!'), now, now, now);
-          await pgWrapper.prepare(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`).run(JSON.stringify({
-            store_name: 'Paper & Quill Stationery', contact_email: 'hello@paperandquill.co.za', phone: '', address_line1: '42 Bram Fischer Drive', address_line2: 'Ferndale', city: 'Johannesburg', province: 'Gauteng', postal_code: '2194', country: 'ZA', currency: 'ZAR', tax_enabled: false, tax_rate_percent: 0, prices_include_tax: true, shipping_taxable: true, free_shipping_enabled: true, free_shipping_threshold_cents: 95000, standard_base_cents: 7500, express_base_cents: 15000, weight_threshold_g: 5000, weight_surcharge_cents: 2500, express_weight_surcharge_cents: 5000, invoice_prefix: 'INV', order_prefix: 'ORD', invoice_due_days: 14, bank_name: 'First National Bank', bank_account_name: 'Paper & Quill Stationery (Pty) Ltd', bank_account_number: '62000000000', bank_branch_code: '250655', bank_reference_note: 'Please use your Order Number as payment reference', vat_number: ''
-          }));
-          // Seed categories for Postgres as well (fixes FK on product create)
-          try {
-            const catCount = await pgWrapper.prepare('SELECT COUNT(*) as c FROM categories').get() as any;
-            const cc = parseInt(catCount?.c ?? catCount?.count ?? 0, 10);
-            if (cc === 0) {
-              const cats = [
-                { id: '11111111-1111-4000-8000-000000000001', name: 'Pens & Writing', slug: 'pens-writing' },
-                { id: '11111111-1111-4000-8000-000000000002', name: 'Notebooks & Pads', slug: 'notebooks-pads' },
-                { id: '11111111-1111-4000-8000-000000000003', name: 'Office Supplies', slug: 'office-supplies' },
-                { id: '11111111-1111-4000-8000-000000000004', name: 'Art Supplies', slug: 'art-supplies' },
-                { id: '11111111-1111-4000-8000-000000000005', name: 'School Essentials', slug: 'school-essentials' },
-              ];
-              for (const c of cats) {
-                await pgWrapper.prepare(`INSERT INTO categories (id, name, slug, description, active, sort_order) VALUES (?, ?, ?, '', 1, ?) ON CONFLICT(id) DO NOTHING`).run(c.id, c.name, c.slug, cats.indexOf(c) + 1);
-              }
-              console.log('[db] Postgres seeded categories (5)');
-            }
-          } catch {}
-          console.log('[db] Postgres seeded admin/customer');
+      console.log('[db] Turso schema bootstrapped');
+    }
+    const countRow = (await q('SELECT COUNT(*) as c FROM users')).rows[0] as any;
+    const c = parseInt(countRow?.c ?? 0, 10);
+    if (c === 0) {
+      console.log('[db] Turso no users, seeding...');
+      const adminEmail = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase();
+      const adminPassword = process.env.ADMIN_PASSWORD || 'ChangeMe123!';
+      const adminId = '00000000-0000-4000-a000-000000000001';
+      const now = new Date().toISOString();
+      const hash = (p: string) => {
+        const salt = crypto.randomBytes(16).toString('hex');
+        const dk = crypto.scryptSync(p, salt, 64, { N: 16384, r: 8, p: 1 });
+        return `scrypt:16384:8:1:${salt}:${dk.toString('hex')}`;
+      };
+      await q(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'System Administrator', '', 'admin', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, [adminId, adminEmail, hash(adminPassword), now, now, now]);
+      await q(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'Thabo Mokoena', '', 'customer', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, ['00000000-0000-4000-a000-000000000002', 'customer@example.com', hash('Customer123!'), now, now, now]);
+      await q(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`, [JSON.stringify({
+        store_name: 'Paper & Quill Stationery', contact_email: 'hello@paperandquill.co.za', phone: '', address_line1: '42 Bram Fischer Drive', address_line2: 'Ferndale', city: 'Johannesburg', province: 'Gauteng', postal_code: '2194', country: 'ZA', currency: 'ZAR', tax_enabled: false, tax_rate_percent: 0, prices_include_tax: true, shipping_taxable: true, free_shipping_enabled: true, free_shipping_threshold_cents: 95000, standard_base_cents: 7500, express_base_cents: 15000, weight_threshold_g: 5000, weight_surcharge_cents: 2500, express_weight_surcharge_cents: 5000, invoice_prefix: 'INV', order_prefix: 'ORD', invoice_due_days: 14, bank_name: 'First National Bank', bank_account_name: 'Paper & Quill Stationery (Pty) Ltd', bank_account_number: '62000000000', bank_branch_code: '250655', bank_reference_note: 'Please use your Order Number as payment reference', vat_number: ''
+      })]);
+      const catCount = (await q('SELECT COUNT(*) as c FROM categories')).rows[0] as any;
+      const cc = parseInt(catCount?.c ?? 0, 10);
+      if (cc === 0) {
+        const cats = [
+          { id: '11111111-1111-4000-8000-000000000001', name: 'Pens & Writing', slug: 'pens-writing' },
+          { id: '11111111-1111-4000-8000-000000000002', name: 'Notebooks & Pads', slug: 'notebooks-pads' },
+          { id: '11111111-1111-4000-8000-000000000003', name: 'Office Supplies', slug: 'office-supplies' },
+          { id: '11111111-1111-4000-8000-000000000004', name: 'Art Supplies', slug: 'art-supplies' },
+          { id: '11111111-1111-4000-8000-000000000005', name: 'School Essentials', slug: 'school-essentials' },
+        ];
+        for (const cat of cats) {
+          await q(`INSERT INTO categories (id, name, slug, description, active, sort_order) VALUES (?, ?, ?, '', 1, ?) ON CONFLICT(id) DO NOTHING`, [cat.id, cat.name, cat.slug, cats.indexOf(cat) + 1]);
         }
-      } catch (e) { console.warn('[db] Postgres seed check failed:', (e as Error).message); }
-    } catch (e) {
-      console.error('[db] Postgres bootstrap failed:', e);
+        console.log('[db] Turso seeded categories (5)');
+      }
+      console.log('[db] Turso seeded admin/customer');
     }
   })();
-  pgReady = Promise.race([
-    bootstrapPg,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Postgres bootstrap timeout after 7s — Neon may be paused')), 7000))
+  tursoReady = Promise.race([
+    bootstrapTurso,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Turso bootstrap timeout after 20s - check TURSO_DATABASE_URL')), 20000))
   ]).catch(e => {
-    console.warn('[db] pgReady timeout/fallback (will use SQLite for this instance):', (e as Error).message);
-    // Fallback to SQLite so GET / doesn't hang 0-status
-    try {
-      isPg = false;
-      const fallbackDb = new (require('better-sqlite3'))(dbPath);
-      fallbackDb.pragma('foreign_keys = ON');
-      fallbackDb.pragma('journal_mode = WAL');
-      fallbackDb.pragma('busy_timeout = 5000');
-      ensureSchema(fallbackDb);
-      ensureDefaultSeed(fallbackDb);
-      globalForDb.db = fallbackDb;
-      const sqliteWrapper: any = {
-        prepare: (sql: string) => {
-          const stmt: any = fallbackDb.prepare(sql);
-          return {
-            get: async (...params: any[]) => stmt.get(...params),
-            all: async (...params: any[]) => stmt.all(...params),
-            run: async (...params: any[]) => stmt.run(...params),
-          };
-        },
-        exec: async (sql: string) => fallbackDb.exec(sql),
-        transaction: (fn: any) => {
-          return async (...args: any[]) => {
-            try { fallbackDb.exec('BEGIN'); const r = await fn(...args); fallbackDb.exec('COMMIT'); return r; } catch (e) { try { fallbackDb.exec('ROLLBACK'); } catch {} throw e; }
-          };
-        },
-        pragma: (s: string) => fallbackDb.pragma(s),
-        _raw: fallbackDb,
-      };
-      db = sqliteWrapper;
-      console.log('[db] Fallback to SQLite after Postgres timeout');
-    } catch (fbErr) {
-      console.error('[db] Fallback to SQLite also failed:', fbErr);
-    }
+    console.error('[db] Turso bootstrap failed (no fallback - fix TURSO vars):', (e as Error).message);
+    throw e;
   }) as Promise<void>;
 } else {
   const sqliteDb =

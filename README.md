@@ -153,7 +153,7 @@ function getEffectiveDbPath() {
  // try mkdir, fallback to /tmp/data on ENOENT
  // ensureSchema(): if `users` missing, bootstrap from migrations/ or embedded FALLBACK_SCHEMA (001_init.sql)
 ```
-`scripts/*.mjs` patched identically. Build still succeeds with empty DB; pages show empty catalog instead of 500. For persistence, use Vercel Postgres/Neon (set `DATABASE_FILE` to external URL) or run `migrate+seed` as Build Command. See [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+`scripts/*.mjs` patched identically. Build still succeeds with empty DB; pages show empty catalog instead of 500. For persistence on Vercel, set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (free tier, same SQLite dialect, zero schema changes) — see [`DEPLOYMENT.md`](./DEPLOYMENT.md) Turso setup. VPS/local keeps the `better-sqlite3` file with no cloud needed.
 
 ---
 
@@ -163,7 +163,7 @@ GitHub Actions (`.github/workflows/ci.yml`):
 
 ```yaml
 on: [push, pull_request] -> ubuntu-latest
-  verify: typecheck -> lint -> test -> db:migrate -> db:seed -> build (+ audit for Vercel fix)
+  verify: typecheck -> lint -> test -> db:migrate -> db:seed -> turso file-DB migrate+seed check -> build -> HTTP smoke (boot + curl / /catalog /auth/login)
   audit: grep checks for getEffectiveDbPath/FALLBACK_SCHEMA in lib/db.ts + scripts
 ```
 
@@ -174,7 +174,7 @@ Badge at top reflects `main`. All checks must pass before Vercel deploy. Locally
 ## 🧪 Testing
 
 ```bash
-bun run test          # vitest run — money (allocateDiscounts, tax) + auth (scrypt)
+bun run test          # vitest — money, auth, validation, turso driver, staging smoke
 bun run typecheck     # tsc --noEmit
 bun run lint          # eslint . (flat config)
 ```

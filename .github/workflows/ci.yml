@@ -49,6 +49,25 @@ jobs:
       - name: DB seed
         run: bun run db:seed
 
+      - name: Turso file-DB migrate + seed (LibSQL path)
+        run: |
+          rm -f /tmp/turso-ci.db
+          TURSO_DATABASE_URL="file:/tmp/turso-ci.db" bun run db:migrate:turso
+          TURSO_DATABASE_URL="file:/tmp/turso-ci.db" SEED_DEMO=true bun run db:seed:turso
+          TURSO_DATABASE_URL="file:/tmp/turso-ci.db" node -e "
+            import('@libsql/client').then(async ({ createClient }) => {
+              const client = createClient({ url: 'file:/tmp/turso-ci.db' });
+              const products = await client.execute('SELECT COUNT(*) as c FROM products');
+              const users = await client.execute('SELECT COUNT(*) as c FROM users');
+              const coupons = await client.execute('SELECT COUNT(*) as c FROM coupons');
+              console.log('turso-ci products=' + products.rows[0].c + ' users=' + users.rows[0].c + ' coupons=' + coupons.rows[0].c);
+              if (products.rows[0].c < 15) throw new Error('Expected >=15 products, got ' + products.rows[0].c);
+              if (users.rows[0].c < 2) throw new Error('Expected >=2 users, got ' + users.rows[0].c);
+              if (coupons.rows[0].c < 3) throw new Error('Expected >=3 coupons, got ' + coupons.rows[0].c);
+              console.log('Turso file-DB seed verified');
+            });
+          "
+
       - name: Build
         run: bun run build
         env:
@@ -59,6 +78,19 @@ jobs:
         run: |
           test -d .next || (echo "Build failed: .next not found" && exit 1)
           echo "Build succeeded, .next size: $(du -sh .next | cut -f1)"
+
+      - name: Smoke test (boot + HTTP)
+        run: |
+          PORT=3100 bun run start > /tmp/next-start.log 2>&1 &
+          echo $! > /tmp/next.pid
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3100/ > /dev/null && break || sleep 2
+          done
+          curl -sf http://127.0.0.1:3100/ | head -c 200; echo
+          curl -sf http://127.0.0.1:3100/catalog | head -c 200; echo
+          curl -sf http://127.0.0.1:3100/auth/login | head -c 200; echo
+          echo "Smoke test passed"
+          kill $(cat /tmp/next.pid) || true
 
   audit:
     runs-on: ubuntu-latest
