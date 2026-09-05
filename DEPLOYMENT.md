@@ -27,16 +27,23 @@
 3. **Env Vars (Vercel → Settings → Environment Variables):**
    ```ini
    DATABASE_FILE=/tmp/data/app.db
-   SESSION_SECRET=openssl rand -hex 32   # ≥32 chars, required
+   SESSION_SECRET=openssl rand -hex 32   # ≥32 chars, strongly recommended (cross-instance login resume)
    ADMIN_EMAIL=admin@example.com
    ADMIN_PASSWORD=ChangeMe123!
    SEED_DEMO=true
    SEED_TAX_ENABLED=false
    GEMINI_API_KEY=...        # AI Studio secret
    APP_URL=https://<vercel-url>  # auto-injected if not set
+   # Persistence (required if logins/orders must survive — /tmp is per-instance ephemeral):
+   TURSO_DATABASE_URL=libsql://...   # Turso dashboard → database → URL
+   TURSO_AUTH_TOKEN=...               # turso db tokens create <db-name>
    ```
-   Mark `SESSION_SECRET`, `GEMINI_API_KEY` as **Encrypted**.
+   Mark `SESSION_SECRET`, `GEMINI_API_KEY`, `TURSO_AUTH_TOKEN` as **Encrypted**.
+   Notes:
+   - Login works even with zero env vars (opaque DB sessions), but logins only stick on one instance until `SESSION_SECRET` is set, and all writes evaporate on cold start until Turso is set.
+   - With `TURSO_*` set, no manual seeding is needed: first request auto-creates schema + admin/customer + catalogue.
 4. **Deploy:** Push to `main` → Vercel auto-deploys + GitHub CI runs. Check Vercel Logs → no `ENOENT mkdir '/var/task/data'` (fixed `lib/db.ts:5`).
+   **Symptom guide:** can't log in with an error digest → set `SESSION_SECRET`; logins drop + writes vanish → set `TURSO_*`; 10–20s first loads → cold start + remote-DB bootstrap (normal on hobby, then warm).
 
 ### B. Vercel via CLI (if GitHub not linked)
 

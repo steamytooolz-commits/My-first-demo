@@ -157,15 +157,26 @@ function verifyJwt(token: string): { sub: string; exp: number } | null {
 }
 
 /**
- * Create a new user session and set cookie
- * Now creates both a DB session (for local persistence) and a stateless JWT fallback for Vercel ephemeral /tmp
+ * Create a new user session and set cookie.
+ * - DB session row is the source of truth (works everywhere, no env needed).
+ * - Cookie value is a stateless JWT when SESSION_SECRET is configured (survives
+ *   Vercel /tmp per-instance DB loss), otherwise an opaque random token that
+ *   only validates against the DB row. Login therefore works on Vercel with
+ *   zero environment configuration; set SESSION_SECRET for cross-instance
+ *   resume and use Turso for fully shared sessions.
  */
 export async function createSession(userId: string, ip?: string, userAgent?: string): Promise<string> {
   const sessionId = crypto.randomUUID();
-  // Stateless JWT — survives Vercel /tmp per-instance DB loss
   const expSeconds = Math.floor(Date.now() / 1000) + SESSION_DURATION_DAYS * 24 * 60 * 60;
-  const jwtPayload = { sub: userId, exp: expSeconds, iat: Math.floor(Date.now() / 1000) };
-  const rawToken = signJwt(jwtPayload);
+  let rawToken: string;
+  try {
+    const jwtPayload = { sub: userId, exp: expSeconds, iat: Math.floor(Date.now() / 1000) };
+    rawToken = signJwt(jwtPayload);
+  } catch {
+    // No usable SESSION_SECRET (e.g. fresh Vercel project): opaque token.
+    // DB row below is authoritative, so login still succeeds.
+    rawToken = `s_${crypto.randomBytes(32).toString('hex')}`;
+  }
   const tokenHash = hashSessionToken(rawToken);
 
   const expiresAt = new Date(expSeconds * 1000).toISOString();
