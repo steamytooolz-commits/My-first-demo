@@ -63,11 +63,24 @@ export function validateSitePayload(raw: unknown): { ok: boolean; error?: string
   return { ok: true, doc: d as SiteExportDoc };
 }
 
-async function targetColumns(table: string): Promise<string[]> {
-  const info = (await db.prepare(`PRAGMA table_info(${table})`).all()) as any[];
-  return info
-    .map((c: any) => String(c?.name ?? Object.values(c ?? {})[1] ?? ''))
-    .filter(Boolean);
+async function targetColumns(table: string, sampleRows: any[] = []): Promise<string[]> {
+  try {
+    const info = (await db.prepare(`PRAGMA table_info(${table})`).all()) as any[];
+    const cols = info
+      .map((c: any) => String(c?.name ?? Object.values(c ?? {})[1] ?? ''))
+      .filter(Boolean);
+    if (cols.length > 0) return cols;
+  } catch {
+    // fall through to row-key fallback below (some LibSQL remotes restrict PRAGMA)
+  }
+  // Fallback: union of the payload's own keys — unknown columns then fail per-row, never the restore.
+  const union = new Set<string>();
+  for (const row of sampleRows.slice(0, 50)) {
+    if (row && typeof row === 'object') {
+      for (const k of Object.keys(row)) union.add(k);
+    }
+  }
+  return [...union];
 }
 
 function toStorable(v: any): any {
@@ -105,13 +118,7 @@ export async function importSiteData(doc: SiteExportDoc, mode: 'merge' | 'replac
     for (const t of SITE_TABLES) {
       const rows = Array.isArray(doc.tables[t]) ? doc.tables[t] : null;
       if (!rows) continue;
-      let cols: string[];
-      try {
-        cols = await targetColumns(t);
-      } catch {
-        skipped.push(t);
-        continue;
-      }
+      const cols = await targetColumns(t, rows);
       if (cols.length === 0) {
         skipped.push(t);
         continue;

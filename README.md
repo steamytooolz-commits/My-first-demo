@@ -1,6 +1,6 @@
-# Paper & Quill Stationery — Online Store
+# Paper & Quill Stationery — Online Store (Demo v1 Final)
 
-> **A complete, production-ready stationery e-commerce for South Africa** — storefront browsing, cart, checkout simulation, customer portal, VAT invoicing, POPIA compliance, and admin dashboard. Built with **Next.js 15**, **SQLite (`better-sqlite3`)**, **Tailwind CSS 4**.
+> **A complete stationery e-commerce for South Africa** — storefront browsing, cart, checkout simulation, customer portal, VAT invoicing, POPIA compliance, B2B trade accounts, and admin dashboard. Built with **Next.js 15**, **SQLite (`better-sqlite3`) / Turso edge**, **Tailwind CSS 4**.
 
 [![CI](https://github.com/steamytooolz-commits/My-first-demo/actions/workflows/ci.yml/badge.svg)](https://github.com/steamytooolz-commits/My-first-demo/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-15.4-black)
@@ -9,15 +9,19 @@
 
 ---
 
-## ✨ Features
+## ✨ Features (v1)
 
-- **Storefront** — category explorer, catalog with search / price / stock filters, product detail with variants (`/`, `/catalog`, `/products/[slug]`)
-- **Cart & Checkout** — guest + authenticated carts, coupon codes, weight-based shipping (`pickup`/`standard`/`express`), VAT-inclusive tax math
-- **Payment simulation** — `sim_card` (success/declined/pending), `manual_eft` (bank details + admin verification), `pay_on_delivery` — no external gateway
-- **Customer portal** — orders, invoices, addresses, profile, security, POPIA privacy (`/account/*`, `/api/account/export`)
-- **Admin** — dashboard, products/variants, CSV catalogue import (`/admin/products/import`), categories, orders, invoices, coupons, customers/POPIA, audit logs, settings, one-click maintenance (`/admin/*`)
-- **Invoicing** — sequential `INV-YYYY-NNNNNN` / `ORD-YYYY-NNNNNN` via `sequences`, SARS-compliant VAT, seller/buyer snapshots, print view
-- **Compliance** — POPIA consent, 7-day erasure grace, anonymization while retaining 5-year tax invoices (`lib/privacy.ts`)
+- **Storefront** — live hero showcase, category explorer, catalog with search / price / stock filters, product detail with variants, demo-tour band (`/`, `/catalog`, `/products/[slug]`)
+- **Cart & Checkout** — guest + authenticated carts (auto-merge on login), coupon codes, weight-based shipping (`pickup`/`standard`/`express`), live order totals, VAT-inclusive tax math, idempotent order placement
+- **Payment simulation** — `sim_card` (success/declined/pending + retry), `manual_eft` (bank details + admin verification), `pay_on_delivery` (Gauteng-only, server-enforced) — no external gateway
+- **Customer portal** — overview, orders & invoices, addresses (20 max), profile, security (password change revokes other sessions), trade application, POPIA privacy with export + erasure (7-day hold or immediate) (`/account/*`)
+- **B2B trade (Beta)** — application with business/VAT/CIPC details, admin approve/reject queue, trade badges, business-named VAT invoices (`/account/trade`, `/admin/customers`)
+- **Admin** — dashboard (KPIs, stock alerts, 3-flow pitch panel, DB persistence badge), one-page product+SKU create, variant inventory, bulk CSV import (comma/semicolon/tab/pipe, Afrikaans headers, SA price locales), categories, orders lifecycle, invoices, coupons, customers/POPIA/trade, audit trail, store settings that actually save, backups (`/admin/*`)
+- **Backups & site transfer** — full-site JSON export (21 tables) + merge/replace restore, schema-tolerant across migration levels (`/admin/backups`, `/api/admin/export/site`)
+- **Invoicing** — sequential `INV-YYYY-NNNNNN` / `ORD-YYYY-NNNNNN` via `sequences`, TAX INVOICE only when VAT was charged, frozen seller/buyer snapshots, bank block only while balance due, print view
+- **Compliance** — POPIA acknowledgement + separate marketing opt-in, Information Officer + Regulator route, contact-form notice, ECT cooling-off disclosures, TAA 5-year retention with buyer-redacted invoices (`lib/privacy.ts`)
+- **Trust kit** — WhatsApp order-help button (toggle + number in settings), POPIA-aligned badges, dynamic free-shipping threshold everywhere, store name + monogram applied site-wide from settings
+- **Responsive** — all data tables scroll inside their cards, phone-width navbar/invoice, empty states instead of blank grids
 
 ---
 
@@ -27,11 +31,12 @@
 |-------|------|
 | Framework | Next.js 15 App Router, React 19, Server Actions, RSC |
 | Styling | Tailwind CSS 4, `@tailwindcss/postcss`, `tw-animate-css` |
-| DB | SQLite `better-sqlite3` WAL (`PRAGMA journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`) |
-| Validation | Zod, `react-hook-form` + `@hookform/resolvers` |
-| Auth | `scrypt` (`N=16384, r=8, p=1`), `sha256` session tokens, `jpf_session` cookie (`httpOnly`, `secure`, `sameSite:none`) |
-| Money | integer cents, VAT `round(total * 15 / 115)` (SA 15% inclusive) |
-| Tests | Vitest |
+| DB | SQLite `better-sqlite3` WAL (`journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=ON`); Turso/LibSQL edge when `TURSO_DATABASE_URL` is set (same dialect, runtime auto-seed) |
+| Validation | Zod throughout (server actions; no client form library) |
+| Auth | `scrypt` (`N=16384, r=8, p=1`), `sha256` session rows, signed JWT cookie with opaque-token fallback (`jpf_session`: `httpOnly`, `secure`, `sameSite=lax`); JWT resume only on DB failure |
+| Money | integer cents, VAT `round(total * 15 / 115)` (SA 15% inclusive), atomic stock/coupon guards, per-email login throttle, per-user checkout throttle |
+| Headers | `nosniff`, `Referrer-Policy`, `SAMEORIGIN` framing, HSTS, `Permissions-Policy`, no `x-powered-by` |
+| Tests | Vitest — 8 suites, 47 tests |
 
 See [`ASSUMPTIONS.md`](./ASSUMPTIONS.md) for statutory & simulation details.
 
@@ -51,8 +56,8 @@ cp .env.example .env
 # edit SESSION_SECRET (openssl rand -hex 32), DATABASE_FILE, ADMIN_EMAIL/PASSWORD
 
 # 3. DB
-bun run db:migrate   # applies migrations/001_init.sql
-bun run db:seed      # store settings + admin/customer + 15 products/21 variants + coupons + 2 demo orders
+bun run db:migrate   # applies migrations/001_init.sql → 002_qol.sql → 003_trade.sql
+bun run db:seed      # settings + admin/customer + catalogue + coupons + demo orders
 
 # 4. Dev
 bun run dev          # http://localhost:3000
@@ -73,18 +78,20 @@ Copy `.env.example`:
 
 ```ini
 DATABASE_FILE=./data/app.db
-SESSION_SECRET=replace-with-long-random-hex
+SESSION_SECRET=replace-with-long-random-hex   # ≥32 chars; login works without it, cross-instance resume needs it
 PUBLIC_APP_URL=http://localhost:3000
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=ChangeMe123!
 SEED_DEMO=true
 SEED_TAX_ENABLED=false
 SEED_TAX_RATE_PERCENT=0
+TURSO_DATABASE_URL=                             # set on Vercel for shared persistence (Marketplace Turso injects these)
+TURSO_AUTH_TOKEN=
 GEMINI_API_KEY="MY_GEMINI_API_KEY"  # AI Studio injects at runtime
 APP_URL="MY_APP_URL"                # Cloud Run URL, injected at runtime
 ```
 
-On **Vercel** `DATABASE_FILE` is auto-redirected to `/tmp/data/app.db` (read-only FS fix in `lib/db.ts`). See [Deployment Guide](./DEPLOYMENT.md).
+On **Vercel** `DATABASE_FILE` is auto-redirected to `/tmp/data/app.db` (**per-instance ephemeral**: writes evaporate, sessions don't travel). For anything beyond demo-clicking, connect Turso (Dashboard → Storage → Marketplace → Turso → Redeploy); first visit auto-builds schema + seeds. See [Deployment Guide](./DEPLOYMENT.md).
 
 ---
 
@@ -97,11 +104,11 @@ On **Vercel** `DATABASE_FILE` is auto-redirected to `/tmp/data/app.db` (read-onl
 | `start` | `next start` |
 | `lint` | `eslint .` (flat config `eslint.config.mjs`) |
 | `typecheck` | `tsc --noEmit` |
-| `test` | `vitest run` (2 suites, 7 tests) |
-| `db:migrate` | `node scripts/migrate.mjs` |
-| `db:seed` | `node scripts/seed.mjs` |
+| `test` | `vitest run` (8 suites, 47 tests: money, validation, auth, csv-import incl. Afrikaans/edge formats, site-transfer round-trip, seed-data, turso driver, smoke) |
+| `db:migrate` / `db:migrate:turso` | apply `migrations/*.sql` (tolerant reruns) |
+| `db:seed` / `db:seed:turso` | store settings + accounts + catalogue + coupons |
 | `db:reset` | delete DB + migrate |
-| `verify` | typecheck && lint && test && migrate && build |
+| `verify` | typecheck && lint && test && db:migrate && build |
 | `privacy:process` | anonymize due `data_subject_requests` |
 | `carts:abandon` | mark stale carts `abandoned` (7d) |
 | `orders:expire` | cancel `pending_payment` >7d, restore stock, void invoice |
@@ -112,59 +119,53 @@ On **Vercel** `DATABASE_FILE` is auto-redirected to `/tmp/data/app.db` (read-onl
 ## 🏗️ Architecture
 
 ```
-app/                # App Router pages & Server Actions
-  page.tsx          # Home: categories + featured (SQL aggregations)
-  catalog/page.tsx  # Filtered catalog (dynamic WHERE/HAVING)
-  products/[slug]/  # Variant selector (ProductDetailClient)
-  cart/, checkout/  # Cart summary (server-authoritative pricing)
-  account/, admin/  # Portals (requireUser/requireAdmin)
-  api/*/export/     # JSON/CSV exports
-components/         # Client islands (CartClient, CheckoutClient, etc.)
+app/                       # App Router pages & Server Actions (all return {success, error?})
+  page.tsx                 # Home: live hero, categories, featured, demo-tour (dynamic metadata)
+  catalog/page.tsx         # Filtered catalog (dynamic WHERE/HAVING)
+  products/[slug]/         # Variant selector (ProductDetailClient)
+  cart/, checkout/         # Server-authoritative pricing, live totals, idempotency keys
+  account/ (trade, privacy…) # Portal + trade applications + erasure
+  admin/ (backups, …)      # Dashboard, products, CSV import, orders, coupons, customers, settings, audit
+  api/*/export/            # JSON/CSV/site exports (auth, rate-limited, no-store)
+components/                # ActionForm (visible errors), QuickAddButton, Admin*Form, SiteImportForm, WhatsAppButton…
 lib/
-  db.ts             # Vercel-aware path + WAL + embedded fallback schema (see Vercel note)
-  cart.ts           # findActiveCart, getOrCreateActiveCart, mergeGuestCart, getCartSummary
-  checkout.ts       # executeCheckout (transaction, coupon, shipping, tax, sequences, invoice)
-  money.ts          # allocateDiscounts, calculateAndAllocateTax, formatZar
-  auth.ts           # scrypt, session cookies, getSessionUser
-  invoicing.ts      # createInvoiceForOrder
-  privacy.ts        # generateCustomerExport, requestAccountErasure
-  settings.ts       # getStoreSettings (JSON in `settings`)
-migrations/001_init.sql  # 15 tables + indices (users, sessions, carts, orders, invoices, sequences, audit_logs, ...)
-scripts/            # migrate, seed, reset, cron helpers
-test/               # money.test.ts, auth.test.ts
-public/seed/        # SVG placeholders generated on seed
+  db.ts                    # Dual backend (better-sqlite3 ↔ Turso), Vercel /tmp redirect, FALLBACK_SCHEMA, seeds
+  cart.ts / checkout.ts    # findActiveCart, mergeGuestCart, getCartSummary, executeCheckout (atomic guards)
+  money.ts                 # allocateDiscounts, calculateAndAllocateTax, formatZar
+  auth.ts                  # scrypt, sessions, sanitizeRedirectTo, JWT-gated fallback
+  invoicing.ts / sequences.ts  # createInvoiceForOrder, nextSequence (no nested txns)
+  privacy.ts / settings.ts # export/erasure, JSON settings row
+  csv-import.ts            # delimiter detect, alias dict (EN+AF), SA price locales, image allowlist
+  site-transfer.ts         # versioned full-site export/import (merge/replace, schema-tolerant)
+  audit.ts / rate-limit.ts / validation.ts
+migrations/                # 001_init.sql (23 tables) → 002_qol.sql (indexes, idempotency, coupon reuse) → 003_trade.sql
+scripts/                   # migrate(+turso), seed(+turso), reset, backup, cron helpers
+test/                      # 8 suites: money, validation, auth, csv-import, site-transfer, seed-data, turso, smoke
+public/seed/               # SVG placeholders
 ```
 
 **Money:** all `*_cents` integers, no floats. **VAT:** `Math.round(cents * 15 / 115)` for inclusive prices.
 
-**Sequences:** `nextSequence('order'|'invoice', prefix)` → `ORD-2026-000001`.
+**Sequences:** `nextSequence('order'|'invoice', prefix)` → `ORD-2026-000001` (lock-free, retried).
 
 ---
 
-## ☁️ Vercel Fix (ENOENT)
+## ☁️ Vercel Notes
 
-**Problem:** `lib/db.ts` did `mkdir('/var/task/data')` → Vercel serverless is read-only except `/tmp` → `ENOENT` 500 on `/` and `/favicon.ico`.
-
-**Fix (`lib/db.ts:5`):**
-```ts
-function getEffectiveDbPath() {
-  if (process.env.VERCEL) return raw.replace('/var/task','/tmp') // ./data/app.db → /tmp/data/app.db
-}
- // try mkdir, fallback to /tmp/data on ENOENT
- // ensureSchema(): if `users` missing, bootstrap from migrations/ or embedded FALLBACK_SCHEMA (001_init.sql)
-```
-`scripts/*.mjs` patched identically. Build still succeeds with empty DB; pages show empty catalog instead of 500. For persistence on Vercel, set `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (free tier, same SQLite dialect, zero schema changes) — see [`DEPLOYMENT.md`](./DEPLOYMENT.md) Turso setup. VPS/local keeps the `better-sqlite3` file with no cloud needed.
+- **Read-only FS:** `DATABASE_FILE` redirects to `/tmp` (`getEffectiveDbPath`); cold starts bootstrap schema + demo seed automatically; Navbar degrades instead of erroring on DB hiccups.
+- **Persistence:** `/tmp` is per-instance — use the Turso Marketplace integration for shared logins/orders. Admin dashboard shows a green/amber persistence badge.
+- **Zero-config login:** opaque DB sessions work with no env vars; set `SESSION_SECRET` (≥32) for cross-instance resume.
 
 ---
 
 ## ✅ CI
 
-GitHub Actions (`.github/workflows/ci.yml`):
+GitHub Actions (`.github/workflows/ci.yml` + `turso-seed.yml`):
 
 ```yaml
 on: [push, pull_request] -> ubuntu-latest
   verify: typecheck -> lint -> test -> db:migrate -> db:seed -> turso file-DB migrate+seed check -> build -> HTTP smoke (boot + curl / /catalog /auth/login)
-  audit: grep checks for getEffectiveDbPath/FALLBACK_SCHEMA in lib/db.ts + scripts
+  audit: Vercel-fix grep checks
 ```
 
 Badge at top reflects `main`. All checks must pass before Vercel deploy. Locally, **do not** run `bun`/`npm` on Android — CI handles it.
@@ -174,19 +175,19 @@ Badge at top reflects `main`. All checks must pass before Vercel deploy. Locally
 ## 🧪 Testing
 
 ```bash
-bun run test          # vitest — money, auth, validation, turso driver, staging smoke
+bun run test          # vitest — money, validation, auth, csv-import, site-transfer, seed-data, turso, smoke
 bun run typecheck     # tsc --noEmit
 bun run lint          # eslint . (flat config)
 ```
 
-Config: `vitest.config.mjs` (alias `@` → `./`, node env).
+Config: `vitest.config.mjs` (alias `@` → `./`, node env). Private quote + client build prompt (`private.md`, `client-build-prompt.md`) are git-ignored working files, never pushed.
 
 ---
 
 ## 📖 Docs
 
-- [Assumptions & Compliance](./ASSUMPTIONS.md) — stack, VAT math, payment modes, POPIA 7-day grace, seed data
-- [Deployment Guide](./DEPLOYMENT.md) — local, Vercel, env, DB persistence, cron, troubleshooting
+- [Assumptions & Compliance](./ASSUMPTIONS.md) — stack, VAT math, payment modes, POPIA grace, seed data
+- [Deployment Guide](./DEPLOYMENT.md) — local, Vercel, env checklist + symptom guide, Turso (Marketplace one-click), cron, troubleshooting
 - [CI Workflow](./.github/workflows/ci.yml)
 
 ---
@@ -197,5 +198,6 @@ MIT — see `package.json`. Data in `data/` is git-ignored; `public/seed/` SVGs 
 
 ---
 
-**Made for South Africa** — prices in ZAR, `en-ZA` formatting, FNB bank details, Gauteng address, POPIA first.
+**Demo v1 final** — everything above is implemented, tested (47 green), and deployed. Next horizons (not in v1): real PayFast gateway, Resend transactional email, nonce CSP, managed MySQL/Redis/Mongo topology (see internal build prompt).
 
+**Made for South Africa** — prices in ZAR, `en-ZA` formatting, FNB demo banking, Johannesburg dispatch, POPIA first.
