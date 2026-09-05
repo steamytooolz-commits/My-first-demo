@@ -7,7 +7,7 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { getStoreSettings } from '@/lib/settings';
 import { formatZar } from '@/lib/money';
-import { Truck, FileText, ArrowLeft, Landmark } from 'lucide-react';
+import { Truck, FileText, ArrowLeft, Landmark, Clock } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
