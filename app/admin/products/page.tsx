@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
-import { Plus, Search, Edit, Trash2 } from 'lucide-react';
-import { adminDeleteProductAction } from '@/app/actions/admin';
+import { Plus, Search, Edit } from 'lucide-react';
+import DeleteProductButton from '@/components/DeleteProductButton';
 
 interface AdminProductsPageProps {
   searchParams: Promise<{ q?: string; category?: string }>;
@@ -138,18 +138,9 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
                     <span>Edit</span>
                   </Link>
 
-                  <form action={async () => {
-                    'use server';
-                    await adminDeleteProductAction(p.id);
-                  }} className="inline-block">
-                    <button
-                      type="submit"
-                      className="text-rose-600 hover:text-rose-800 p-1"
-                      title="Delete Product"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </form>
+                  <span className="inline-block">
+                    <DeleteProductButton productId={p.id} productName={p.name} />
+                  </span>
                 </td>
               </tr>
             ))}

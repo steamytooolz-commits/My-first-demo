@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { formatZar } from '@/lib/money';
-import { Trash2, Tag, ArrowRight, Truck, Check, AlertCircle, RefreshCw } from 'lucide-react';
+import { Trash2, Tag, ArrowRight, Truck, Check, AlertCircle } from 'lucide-react';
 import {
   updateCartItemAction,
   removeCartItemAction,
@@ -16,15 +16,23 @@ import { CartSummary } from '@/lib/cart';
 
 interface CartClientProps {
   initialCart: CartSummary;
+  settings?: {
+    free_shipping_threshold_cents: number;
+    standard_base_cents: number;
+    express_base_cents: number;
+  };
 }
 
-export default function CartClient({ initialCart }: CartClientProps) {
+export default function CartClient({ initialCart, settings }: CartClientProps) {
   const [couponCode, setCouponCode] = useState('');
   const [couponError, setCouponError] = useState<string | null>(initialCart.couponWarning || null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [loadingVariantId, setLoadingVariantId] = useState<string | null>(null);
 
   const { items, subtotalCents, discountCents, shippingCents, taxCents, totalCents, shippingMethod, freeShippingProgress } = initialCart;
+  const thresholdLabel = formatZar(settings?.free_shipping_threshold_cents ?? freeShippingProgress.thresholdCents);
+  const standardLabel = (freeShippingProgress.qualifies ? 'FREE' : formatZar(settings?.standard_base_cents ?? 7500));
+  const expressLabel = formatZar(settings?.express_base_cents ?? 15000);
 
   async function handleQtyChange(variantId: string, currentQty: number, delta: number) {
     const newQty = currentQty + delta;
@@ -104,7 +112,7 @@ export default function CartClient({ initialCart }: CartClientProps) {
                   </span>
                 )}
               </span>
-              <span className="text-teal-700 font-mono text-[11px]">Threshold: R950</span>
+              <span className="text-teal-700 font-mono text-[11px]">Threshold: {thresholdLabel}</span>
             </div>
             <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-teal-200/60">
               <div
@@ -211,54 +219,60 @@ export default function CartClient({ initialCart }: CartClientProps) {
           <h3 className="font-serif text-base font-bold text-slate-900">Delivery Method</h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Pickup */}
-            <label
+            <button
+              type="button"
+              aria-pressed={shippingMethod === 'pickup'}
               onClick={() => handleShippingChange('pickup')}
-              className={`cursor-pointer rounded-xl border p-4 flex flex-col justify-between transition-all ${
+              className={`cursor-pointer rounded-xl border p-4 flex flex-col justify-between text-left transition-all ${
                 shippingMethod === 'pickup'
                   ? 'border-teal-700 bg-teal-50/50 ring-1 ring-teal-700'
                   : 'border-slate-200 hover:border-slate-300'
               }`}
             >
-              <div>
+              <span>
                 <span className="text-xs font-bold text-slate-900 block">Warehouse Collection</span>
                 <span className="text-[11px] text-slate-500 block mt-0.5">Ferndale, Johannesburg</span>
-              </div>
-              <span className="mt-3 text-xs font-bold text-teal-800">FREE (R 0.00)</span>
-            </label>
+              </span>
+              <span className="mt-3 text-xs font-bold text-teal-800">FREE ({formatZar(0)})</span>
+            </button>
 
             {/* Standard Courier */}
-            <label
+            <button
+              type="button"
+              aria-pressed={shippingMethod === 'standard'}
               onClick={() => handleShippingChange('standard')}
-              className={`cursor-pointer rounded-xl border p-4 flex flex-col justify-between transition-all ${
+              className={`cursor-pointer rounded-xl border p-4 flex flex-col justify-between text-left transition-all ${
                 shippingMethod === 'standard'
                   ? 'border-teal-700 bg-teal-50/50 ring-1 ring-teal-700'
                   : 'border-slate-200 hover:border-slate-300'
               }`}
             >
-              <div>
+              <span>
                 <span className="text-xs font-bold text-slate-900 block">Standard Courier</span>
                 <span className="text-[11px] text-slate-500 block mt-0.5">2-4 business days</span>
-              </div>
-              <span className="mt-3 text-xs font-bold text-slate-900">
-                {freeShippingProgress.qualifies ? 'FREE' : 'R 75.00'}
               </span>
-            </label>
+              <span className="mt-3 text-xs font-bold text-slate-900">
+                {standardLabel}
+              </span>
+            </button>
 
             {/* Express Courier */}
-            <label
+            <button
+              type="button"
+              aria-pressed={shippingMethod === 'express'}
               onClick={() => handleShippingChange('express')}
-              className={`cursor-pointer rounded-xl border p-4 flex flex-col justify-between transition-all ${
+              className={`cursor-pointer rounded-xl border p-4 flex flex-col justify-between text-left transition-all ${
                 shippingMethod === 'express'
                   ? 'border-teal-700 bg-teal-50/50 ring-1 ring-teal-700'
                   : 'border-slate-200 hover:border-slate-300'
               }`}
             >
-              <div>
+              <span>
                 <span className="text-xs font-bold text-slate-900 block">Express Overnight</span>
                 <span className="text-[11px] text-slate-500 block mt-0.5">1-2 business days</span>
-              </div>
-              <span className="mt-3 text-xs font-bold text-slate-900">R 150.00</span>
-            </label>
+              </span>
+              <span className="mt-3 text-xs font-bold text-slate-900">{expressLabel}</span>
+            </button>
           </div>
         </div>
       </div>

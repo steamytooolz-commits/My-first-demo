@@ -32,6 +32,17 @@ export default async function CheckoutPage() {
           user={user}
           savedAddresses={savedAddresses}
           cart={cart}
+          settings={{
+            free_shipping_enabled: settings.free_shipping_enabled,
+            free_shipping_threshold_cents: settings.free_shipping_threshold_cents,
+            standard_base_cents: settings.standard_base_cents,
+            express_base_cents: settings.express_base_cents,
+            weight_threshold_g: settings.weight_threshold_g,
+            weight_surcharge_cents: settings.weight_surcharge_cents,
+            express_weight_surcharge_cents: settings.express_weight_surcharge_cents,
+            tax_enabled: settings.tax_enabled,
+            tax_rate_percent: settings.tax_rate_percent,
+          }}
           bankDetails={{
             bank_name: settings.bank_name,
             bank_account_name: settings.bank_account_name,

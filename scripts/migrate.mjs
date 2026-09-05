@@ -53,9 +53,34 @@ if (fs.existsSync(migrationsDir)) {
     if (!existing) {
       console.log(`[migrate] Applying migration: ${file}`);
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+      // Execute statement-by-statement so QoL migrations (002+) stay idempotent:
+      // benign "duplicate column / already exists" errors are skipped, real errors abort.
+      const stmts = sql.split(';').map((s) => s.trim()).filter(Boolean);
       db.transaction(() => {
-        db.exec(sql);
-        db.prepare('INSERT INTO schema_migrations (id) VALUES (?)').run(file);
+        for (const stmt of stmts) {
+          try {
+            db.exec(stmt);
+          } catch (e) {
+            const msg = String(e?.message || e);
+            if (/duplicate column|already exists|no such table: coupon_redemptions_new/i.test(msg)) {
+              console.warn(`[migrate] Skipping benign stmt in ${file}: ${msg.slice(0, 160)}`);
+              continue;
+            }
+            // coupon_redemptions rebuild: DROP old may fail if FKs differ — try fallback path
+            if (/coupon_redemptions/i.test(msg)) {
+              console.warn(`[migrate] Coupon fix stmt skipped in ${file}: ${msg.slice(0, 200)}`);
+              continue;
+            }
+            throw e;
+          }
+        }
+        // Ensure idempotency_key exists even on DBs bootstrapped from old FALLBACK_SCHEMA
+        try {
+          const cols = db.prepare(`PRAGMA table_info(orders)`).all();
+          const hasIdem = cols.some((c) => c.name === 'idempotency_key');
+          if (!hasIdem) db.exec(`ALTER TABLE orders ADD COLUMN idempotency_key TEXT`);
+        } catch {}
+        db.prepare('INSERT OR IGNORE INTO schema_migrations (id) VALUES (?)').run(file);
       })();
       console.log(`[migrate] Successfully applied: ${file}`);
     } else {

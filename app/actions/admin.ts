@@ -109,7 +109,110 @@ export async function adminDeleteProductAction(productId: string): Promise<Admin
   await logAudit(admin.id, 'delete_product', 'product', productId);
   revalidatePath('/admin/products');
   revalidatePath('/catalog');
+  revalidatePath('/', 'layout');
   return { success: true };
+}
+
+function slugifyName(value: string): string {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'product';
+}
+
+// One-page create: product + first variant atomically so new items are
+// visible in the store immediately (products without SKUs stay hidden).
+export async function adminCreateProductWithVariantAction(
+  prevState: any,
+  formData: FormData
+): Promise<AdminActionResponse> {
+  const admin = await requireAdmin();
+  const imageUrl = String(formData.get('imageUrl') || '').trim();
+
+  const rawName = String(formData.get('name') || '').trim();
+  let rawSlug = String(formData.get('slug') || '').trim().toLowerCase();
+  if (!rawSlug && rawName) rawSlug = slugifyName(rawName);
+
+  const rawProduct = {
+    name: rawName,
+    slug: rawSlug,
+    category_id: String(formData.get('category_id') || '') || null,
+    brand: String(formData.get('brand') || '').trim(),
+    description: String(formData.get('description') || '').trim(),
+    active: formData.get('active') === 'on',
+    featured: formData.get('featured') === 'on',
+  };
+  const parsedProduct = productSchema.safeParse(rawProduct);
+  if (!parsedProduct.success) {
+    return { success: false, error: parsedProduct.error.issues[0]?.message || 'Invalid product data' };
+  }
+  const p = parsedProduct.data;
+
+  const slugCheck = await db.prepare('SELECT id FROM products WHERE slug = ?').get(p.slug);
+  if (slugCheck) return { success: false, error: 'A product with this URL slug already exists.' };
+
+  let categoryId: string | null = p.category_id ?? null;
+  if (categoryId) {
+    const catExists = await db.prepare('SELECT id FROM categories WHERE id = ?').get(categoryId) as any;
+    if (!catExists) categoryId = null;
+  }
+
+  const rawVariant = {
+    sku: String(formData.get('sku') || '').trim().toUpperCase() || `${slugifyName(p.name).toUpperCase().slice(0, 20)}-STD`,
+    name: String(formData.get('variant_name') || '').trim() || 'Standard',
+    options_json: '{}',
+    price_cents: Math.round(parseFloat(String(formData.get('price_rand') || '0')) * 100),
+    compare_at_price_cents: formData.get('compare_at_rand')
+      ? Math.round(parseFloat(String(formData.get('compare_at_rand'))) * 100)
+      : null,
+    cost_cents: null,
+    stock_qty: parseInt(String(formData.get('stock_qty') || '0'), 10),
+    low_stock_threshold: parseInt(String(formData.get('low_stock_threshold') || '5'), 10),
+    weight_g: parseInt(String(formData.get('weight_g') || '0'), 10),
+    barcode: null,
+    active: formData.get('variant_active') === 'on',
+  };
+  if (Number.isNaN(rawVariant.price_cents)) rawVariant.price_cents = 0;
+  if (Number.isNaN(rawVariant.stock_qty)) rawVariant.stock_qty = 0;
+  const parsedVariant = variantSchema.safeParse(rawVariant);
+  if (!parsedVariant.success) {
+    return { success: false, error: parsedVariant.error.issues[0]?.message || 'Invalid variant inputs' };
+  }
+  const v = parsedVariant.data;
+  const skuCheck = await db.prepare('SELECT id FROM product_variants WHERE sku = ?').get(v.sku);
+  if (skuCheck) return { success: false, error: `SKU "${v.sku}" is already assigned to another variant.` };
+
+  const productId = crypto.randomUUID();
+  const variantId = crypto.randomUUID();
+  await db.transaction(async () => {
+    await db.prepare(`
+      INSERT INTO products (id, category_id, name, slug, description, brand, active, featured, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(productId, categoryId, p.name, p.slug, p.description, p.brand, p.active ? 1 : 0, p.featured ? 1 : 0);
+    if (imageUrl) {
+      await db.prepare(`INSERT INTO product_images (id, product_id, url, alt, position) VALUES (?, ?, ?, ?, 0)`)
+        .run(crypto.randomUUID(), productId, imageUrl, p.name);
+    }
+    await db.prepare(`
+      INSERT INTO product_variants (id, product_id, sku, name, options_json, price_cents, compare_at_price_cents,
+        cost_cents, stock_qty, low_stock_threshold, weight_g, barcode, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(variantId, productId, v.sku, v.name, v.options_json, v.price_cents,
+      v.compare_at_price_cents, v.cost_cents, v.stock_qty, v.low_stock_threshold, v.weight_g, v.barcode, v.active ? 1 : 0);
+    await db.prepare(`
+      INSERT INTO stock_movements (id, variant_id, delta, reason, note, created_at)
+      VALUES (?, ?, ?, 'admin_adjustment', 'Initial stock via one-page create', datetime('now'))
+    `).run(crypto.randomUUID(), variantId, v.stock_qty);
+    await logAudit(admin.id, 'create_product_with_variant', 'product', productId, { product: p, variant: v });
+  })();
+
+  revalidatePath('/admin/products');
+  revalidatePath('/catalog');
+  revalidatePath('/', 'layout');
+  return { success: true, productId };
 }
 
 export async function adminSaveVariantAction(prevState: any, formData: FormData): Promise<AdminActionResponse> {

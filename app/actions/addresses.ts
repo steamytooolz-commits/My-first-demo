@@ -6,7 +6,7 @@ import { db } from '@/lib/db';
 import { requireUser } from '@/lib/auth';
 import { addressSchema } from '@/lib/validation';
 
-export async function saveAddressAction(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string }> {
+export async function saveAddressAction(prevState: any, formData: FormData): Promise<{ success: boolean; error?: string; addressId?: string }> {
   const user = await requireUser();
 
   const id = String(formData.get('id') || '');
@@ -30,6 +30,7 @@ export async function saveAddressAction(prevState: any, formData: FormData): Pro
 
   const data = parsed.data;
 
+  let savedId = id || '';
   await db.transaction(async () => {
     if (data.is_default) {
       await db.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').run(user.id);
@@ -46,6 +47,7 @@ export async function saveAddressAction(prevState: any, formData: FormData): Pro
         data.city, data.province, data.postal_code, data.country, data.is_default ? 1 : 0,
         id, user.id
       );
+      savedId = id;
     } else {
       const addressId = crypto.randomUUID();
       await db.prepare(`
@@ -57,12 +59,13 @@ export async function saveAddressAction(prevState: any, formData: FormData): Pro
         addressId, user.id, data.label, data.full_name, data.phone, data.line1, data.line2 || '',
         data.city, data.province, data.postal_code, data.country, data.is_default ? 1 : 0
       );
+      savedId = addressId;
     }
   })();
 
   revalidatePath('/account/addresses');
   revalidatePath('/checkout');
-  return { success: true };
+  return { success: true, addressId: savedId || undefined };
 }
 
 export async function deleteAddressAction(addressId: string): Promise<{ success: boolean }> {

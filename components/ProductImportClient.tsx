@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   analyzeProductImportAction,
@@ -8,7 +8,7 @@ import {
   type ImportAnalysisResponse,
 } from '@/app/actions/admin';
 import { IMPORT_FIELDS } from '@/lib/import-fields';
-import { Upload, FileSpreadsheet, ArrowRight, CheckCircle2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Upload, FileSpreadsheet, ArrowRight, CheckCircle2, AlertTriangle, RotateCcw, ClipboardPaste, Download } from 'lucide-react';
 
 const TEMPLATE_CSV = [
   'name,slug,category,brand,description,variant,sku,price,compare_at,stock,active,featured,image',
@@ -17,29 +17,67 @@ const TEMPLATE_CSV = [
   '"SmoothFlow Gel Pen 5-Pack",gel-pen-5-pack,Pens & Writing,Cape Quill Co.,0.5mm archival gel ink,Jet Black,PEN-GEL-BLK,115.00,135.00,120,yes,no,',
 ].join('\n');
 
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
 type Step = 'upload' | 'map' | 'result';
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
+}
 
 export default function ProductImportClient() {
   const [step, setStep] = useState<Step>('upload');
   const [csvText, setCsvText] = useState('');
   const [fileName, setFileName] = useState('');
+  const [fileSize, setFileSize] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
+  const [pasteText, setPasteText] = useState('');
   const [analysis, setAnalysis] = useState<ImportAnalysisResponse | null>(null);
   const [mapping, setMapping] = useState<Record<number, string>>({});
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File | undefined) {
-    if (!file) return;
+  async function readFile(file: File) {
     setError(null);
+    if (file.size > MAX_FILE_BYTES) {
+      setError(`File is ${formatBytes(file.size)} — limit is ${formatBytes(MAX_FILE_BYTES)}. Split into smaller imports.`);
+      return;
+    }
     const text = await file.text();
+    if (!text.trim()) {
+      setError('That file looks empty.');
+      return;
+    }
     setCsvText(text);
     setFileName(file.name);
+    setFileSize(file.size);
+  }
+
+  function handleFile(file: File | undefined) {
+    if (!file) return;
+    void readFile(file);
+  }
+
+  function applyPaste() {
+    if (!pasteText.trim()) {
+      setError('Paste CSV text first.');
+      return;
+    }
+    setError(null);
+    setCsvText(pasteText);
+    setFileName('pasted.csv');
+    setFileSize(new Blob([pasteText]).size);
+    setShowPaste(false);
   }
 
   async function handleAnalyze() {
     if (!csvText.trim()) {
-      setError('Choose a CSV file first.');
+      setError('Choose a CSV file or paste CSV text first.');
       return;
     }
     setBusy(true);
@@ -87,10 +125,28 @@ export default function ProductImportClient() {
     setStep('upload');
     setCsvText('');
     setFileName('');
+    setFileSize(0);
+    setPasteText('');
     setAnalysis(null);
     setMapping({});
     setResult(null);
     setError(null);
+  }
+
+  const mappedValues = Object.values(mapping);
+  const hasName = mappedValues.includes('name');
+  const hasPrice = mappedValues.includes('price');
+
+  function downloadErrorsCsv() {
+    if (!result?.errors?.length) return;
+    const lines = ['row,message', ...result.errors.map((e: any) => `${e.row},"${String(e.message || '').replace(/"/g, '""')}"`)];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'import-errors.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -107,24 +163,45 @@ export default function ProductImportClient() {
           <div>
             <h2 className="font-serif text-lg font-bold text-slate-900">1. Upload catalogue CSV</h2>
             <p className="text-xs text-slate-500 mt-1">
-              Delimiter auto-detected (comma, semicolon, tab). Headers are matched automatically —
-              different supplier layouts work as long as columns are labelled sensibly.
+              Drag &amp; drop, click to browse, or paste CSV text. Delimiter auto-detected (comma, semicolon, tab).
+              Max ~2,000 rows / {formatBytes(MAX_FILE_BYTES)} per import.
             </p>
           </div>
 
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center hover:border-teal-700 hover:bg-teal-50/50 transition-colors">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) void readFile(f);
+            }}
+            className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${dragOver ? 'border-teal-700 bg-teal-50' : 'border-slate-300 bg-slate-50 hover:border-teal-700 hover:bg-teal-50/50'}`}
+          >
             <Upload className="h-6 w-6 text-slate-400" />
             <span className="text-xs font-semibold text-slate-700">
-              {fileName || 'Click to choose a .csv file'}
+              {fileName ? `${fileName} (${formatBytes(fileSize)})` : 'Drop a .csv here or click to browse'}
             </span>
             <span className="text-[11px] text-slate-400">Max ~2,000 rows per import</span>
             <input
+              ref={fileInputRef}
               type="file"
               accept=".csv,text/csv"
               className="hidden"
-              onChange={e => handleFile(e.target.files?.[0])}
+              onChange={(e) => handleFile(e.target.files?.[0])}
             />
-          </label>
+          </div>
+
+          {csvText && (
+            <p className="text-[11px] text-slate-500 font-mono truncate">
+              Loaded {(csvText.split(/\r?\n/).length - 1).toLocaleString()} lines • {formatBytes(new Blob([csvText]).size)}
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center gap-3">
             <button
@@ -136,6 +213,14 @@ export default function ProductImportClient() {
               <FileSpreadsheet className="h-4 w-4" />
               <span>{busy ? 'Analyzing…' : 'Analyze columns'}</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setShowPaste((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <ClipboardPaste className="h-4 w-4" />
+              <span>{showPaste ? 'Hide paste box' : 'Paste CSV instead'}</span>
+            </button>
             <a
               href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`}
               download="product-import-template.csv"
@@ -143,7 +228,27 @@ export default function ProductImportClient() {
             >
               Download CSV template
             </a>
+            {csvText && (
+              <button type="button" onClick={reset} className="text-xs font-semibold text-slate-500 hover:text-slate-900">
+                Clear
+              </button>
+            )}
           </div>
+
+          {showPaste && (
+            <div className="space-y-2">
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                rows={6}
+                placeholder="name,price,stock&#10;Notebook,245.00,10"
+                className="w-full rounded-lg border border-slate-200 p-3 font-mono text-xs focus:border-teal-700 focus:outline-none"
+              />
+              <button type="button" onClick={applyPaste} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                Use pasted CSV
+              </button>
+            </div>
+          )}
 
           <details className="rounded-lg bg-slate-50 border border-slate-200 p-4 text-xs text-slate-600">
             <summary className="cursor-pointer font-semibold text-slate-800">Recognised columns &amp; rules</summary>
@@ -180,6 +285,12 @@ export default function ProductImportClient() {
             </button>
           </div>
 
+          {!hasName || !hasPrice ? (
+            <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800">
+              Map at least <strong>Product name</strong> {!hasName && '(missing)'} and <strong>Price</strong> {!hasPrice && '(missing)'} to continue.
+            </div>
+          ) : null}
+
           {analysis.warnings && analysis.warnings.length > 0 && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-1">
               {analysis.warnings.slice(0, 5).map((w, i) => (
@@ -207,16 +318,16 @@ export default function ProductImportClient() {
                     <td className="py-2 pr-3">
                       <select
                         value={mapping[i] || '__ignore'}
-                        onChange={e => setMapping(prev => ({ ...prev, [i]: e.target.value }))}
+                        onChange={(e) => setMapping((prev) => ({ ...prev, [i]: e.target.value }))}
                         className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
                       >
-                        {IMPORT_FIELDS.map(f => (
+                        {IMPORT_FIELDS.map((f) => (
                           <option key={f.key} value={f.key}>{f.label}</option>
                         ))}
                       </select>
                     </td>
                     <td className="py-2 text-slate-500 font-mono text-[11px]">
-                      {(analysis.samples || []).map(s => s[header]).filter(Boolean).slice(0, 3).join(' · ') || '—'}
+                      {(analysis.samples || []).map((s) => s[header]).filter(Boolean).slice(0, 3).join(' · ') || '—'}
                     </td>
                   </tr>
                 ))}
@@ -227,7 +338,7 @@ export default function ProductImportClient() {
           <button
             type="button"
             onClick={handleImport}
-            disabled={busy}
+            disabled={busy || !hasName || !hasPrice}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-800 px-5 py-2.5 text-xs font-semibold text-white shadow hover:bg-teal-900 disabled:opacity-50 transition-colors"
           >
             <span>{busy ? 'Importing…' : `Import ${analysis.rowCount} rows`}</span>
@@ -261,7 +372,13 @@ export default function ProductImportClient() {
 
           {result.errors && result.errors.length > 0 && (
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-1">
-              <p className="font-bold">Rows needing attention (showing {result.errors.length}):</p>
+              <div className="flex items-center justify-between">
+                <p className="font-bold">Rows needing attention (showing {Math.min(result.errors.length, 10)} of {result.errors.length}):</p>
+                <button type="button" onClick={downloadErrorsCsv} className="inline-flex items-center gap-1 font-semibold text-amber-900 hover:underline">
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Errors CSV</span>
+                </button>
+              </div>
               {result.errors.slice(0, 10).map((e: any, i: number) => (
                 <p key={i} className="font-mono text-[11px]">Row {e.row}: {e.message}</p>
               ))}

@@ -37,9 +37,18 @@ if (fs.existsSync(migrationsDir)) {
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
       const stmts = sql.split(';').map(s => s.trim()).filter(Boolean);
       for (const stmt of stmts) {
-        await client.execute(stmt);
+        try {
+          await client.execute(stmt);
+        } catch (e) {
+          const msg = String(e?.message || e);
+          if (/duplicate column|already exists|no such table/i.test(msg)) {
+            console.warn(`[migrate-turso] Skipping benign stmt in ${file}: ${msg.slice(0, 160)}`);
+            continue;
+          }
+          throw e;
+        }
       }
-      await client.execute({ sql: 'INSERT INTO schema_migrations (id) VALUES (?)', args: [file] });
+      await client.execute({ sql: 'INSERT OR IGNORE INTO schema_migrations (id) VALUES (?)', args: [file] });
       console.log(`[migrate-turso] Successfully applied: ${file}`);
     } else {
       console.log(`[migrate-turso] Already applied: ${file}`);

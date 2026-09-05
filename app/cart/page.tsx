@@ -2,9 +2,11 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CartClient from '@/components/CartClient';
 import { getCartSummary } from '@/lib/cart';
+import { getStoreSettings } from '@/lib/settings';
 
 export default async function CartPage() {
   const cart = await getCartSummary();
+  const settings = await getStoreSettings();
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -16,7 +18,14 @@ export default async function CartPage() {
           <p className="text-xs text-slate-500 mt-1">Review your stationery selections before checkout.</p>
         </div>
 
-        <CartClient initialCart={cart} />
+        <CartClient
+          initialCart={cart}
+          settings={{
+            free_shipping_threshold_cents: settings.free_shipping_threshold_cents,
+            standard_base_cents: settings.standard_base_cents,
+            express_base_cents: settings.express_base_cents,
+          }}
+        />
       </main>
 
       <Footer />

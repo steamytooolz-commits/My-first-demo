@@ -21,10 +21,17 @@ export async function placeOrderAction(prevState: any, formData: FormData): Prom
   const shippingMethod = String(formData.get('shippingMethod') || 'standard') as 'pickup' | 'standard' | 'express';
   const paymentMethod = String(formData.get('paymentMethod') || 'sim_card') as 'sim_card' | 'manual_eft' | 'pay_on_delivery';
   const simCardOutcome = String(formData.get('simCardOutcome') || 'success') as 'success' | 'declined' | 'pending';
-  const customerNote = String(formData.get('customerNote') || '').trim();
+  const customerNote = String(formData.get('customerNote') || '').trim().slice(0, 500);
+  const idempotencyKey = String(formData.get('idempotencyKey') || '').trim().slice(0, 64);
 
   if (!addressId) {
     return { success: false, error: 'Please select a delivery address.' };
+  }
+  if (!['pickup', 'standard', 'express'].includes(shippingMethod)) {
+    return { success: false, error: 'Invalid shipping method.' };
+  }
+  if (!['sim_card', 'manual_eft', 'pay_on_delivery'].includes(paymentMethod)) {
+    return { success: false, error: 'Invalid payment method.' };
   }
 
   const headersList = await headers();
@@ -37,6 +44,7 @@ export async function placeOrderAction(prevState: any, formData: FormData): Prom
     simCardOutcome,
     customerNote,
     ip,
+    idempotencyKey: idempotencyKey || undefined,
   });
 
   if (!result.success || !result.orderNumber) {

@@ -25,27 +25,28 @@ export async function nextSequence(kind: 'order' | 'invoice', prefix: string): P
           client.release();
         }
       } else {
-        // SQLite: async-capable transaction (via BEGIN/COMMIT wrapper in lib/db.ts)
-        return await (db as any).transaction(async () => {
-          await db.prepare(`
-            INSERT OR IGNORE INTO sequences (kind, year, last_number)
-            VALUES (?, ?, 0)
-          `).run(kind, year);
+        // SQLite: no explicit transaction here — callers (e.g. executeCheckout) already
+        // wrap sequencing + inserts in an outer transaction. Nested BEGIN would fail
+        // with "cannot start a transaction within a transaction" and force timestamp
+        // fallbacks. Single statements are atomic under WAL; retry on contention.
+        await db.prepare(`
+          INSERT OR IGNORE INTO sequences (kind, year, last_number)
+          VALUES (?, ?, 0)
+        `).run(kind, year);
 
-          await db.prepare(`
-            UPDATE sequences
-            SET last_number = last_number + 1
-            WHERE kind = ? AND year = ?
-          `).run(kind, year);
+        await db.prepare(`
+          UPDATE sequences
+          SET last_number = last_number + 1
+          WHERE kind = ? AND year = ?
+        `).run(kind, year);
 
-          const row = await db.prepare(`
-            SELECT last_number
-            FROM sequences
-            WHERE kind = ? AND year = ?
-          `).get(kind, year) as { last_number: number };
+        const row = await db.prepare(`
+          SELECT last_number
+          FROM sequences
+          WHERE kind = ? AND year = ?
+        `).get(kind, year) as { last_number: number };
 
-          return `${prefix}-${year}-${String(row.last_number).padStart(6, '0')}`;
-        })();
+        return `${prefix}-${year}-${String(row.last_number).padStart(6, '0')}`;
       }
     } catch (e: any) {
       if (attempt === maxRetries - 1) {

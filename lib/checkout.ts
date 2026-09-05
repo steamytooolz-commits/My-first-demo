@@ -14,6 +14,7 @@ export interface CheckoutInput {
   simCardOutcome?: 'success' | 'declined' | 'pending';
   customerNote?: string;
   ip?: string;
+  idempotencyKey?: string;
 }
 
 export interface CheckoutResult {
@@ -24,6 +25,35 @@ export interface CheckoutResult {
 }
 
 export async function executeCheckout(user: User, input: CheckoutInput): Promise<CheckoutResult> {
+  const validShipping = ['pickup', 'standard', 'express'] as const;
+  const validPayment = ['sim_card', 'manual_eft', 'pay_on_delivery'] as const;
+  const validOutcome = ['success', 'declined', 'pending'] as const;
+  if (!validShipping.includes(input.shippingMethod as any)) {
+    return { success: false, error: 'Invalid shipping method selected.' };
+  }
+  if (!validPayment.includes(input.paymentMethod as any)) {
+    return { success: false, error: 'Invalid payment method selected.' };
+  }
+  if (input.simCardOutcome && !validOutcome.includes(input.simCardOutcome as any)) {
+    return { success: false, error: 'Invalid payment outcome.' };
+  }
+  const idempotencyKey = (input.idempotencyKey || '').trim().slice(0, 64) || null;
+
+  // Idempotency: if this browser tab already placed an order (double-click / retry),
+  // return the existing order instead of creating a duplicate.
+  if (idempotencyKey) {
+    try {
+      const existing = await db.prepare(`
+        SELECT id, order_number FROM orders WHERE idempotency_key = ? AND user_id = ?
+      `).get(idempotencyKey, user.id) as any;
+      if (existing) {
+        return { success: true, orderId: existing.id, orderNumber: existing.order_number };
+      }
+    } catch {
+      // Column may not exist on DBs that haven't run 002 yet — continue; self-heal later.
+    }
+  }
+
   const rateLimitKey = `checkout:${user.id}:${input.ip || 'local'}`;
   const rateCheck = await checkRateLimit(rateLimitKey, 10, 15 * 60 * 1000);
   if (!rateCheck.allowed) {
@@ -228,35 +258,64 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
       country: address.country,
     });
 
-    await db.prepare(`
-      INSERT INTO orders (
-        id, order_number, user_id, email, status, currency,
-        subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
-        shipping_method, shipping_address_json, billing_address_json,
-        coupon_code, customer_note, placed_at, updated_at
-      ) VALUES (
-        ?, ?, ?, ?, ?, 'ZAR',
-        ?, ?, ?, ?, ?,
-        ?, ?, ?,
-        ?, ?, datetime('now'), datetime('now')
-      )
-    `).run(
-      orderId,
-      orderNumber,
-      user.id,
-      user.email,
-      orderStatus,
-      subtotalCents,
-      couponDiscountCents,
-      shippingCents,
-      taxResult.totalTaxCents,
-      totalCents,
-      input.shippingMethod,
-      shippingAddressJson,
-      shippingAddressJson,
-      appliedCoupon ? appliedCoupon.code : null,
-      input.customerNote || null
-    );
+    try {
+      await db.prepare(`
+        INSERT INTO orders (
+          id, order_number, user_id, email, status, currency,
+          subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
+          shipping_method, shipping_address_json, billing_address_json,
+          coupon_code, customer_note, idempotency_key, placed_at, updated_at
+        ) VALUES (
+          ?, ?, ?, ?, ?, 'ZAR',
+          ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, datetime('now'), datetime('now')
+        )
+      `).run(
+        orderId,
+        orderNumber,
+        user.id,
+        user.email,
+        orderStatus,
+        subtotalCents,
+        couponDiscountCents,
+        shippingCents,
+        taxResult.totalTaxCents,
+        totalCents,
+        input.shippingMethod,
+        shippingAddressJson,
+        shippingAddressJson,
+        appliedCoupon ? appliedCoupon.code : null,
+        input.customerNote?.slice(0, 500) || null,
+        idempotencyKey
+      );
+    } catch (e: any) {
+      // Self-heal DBs that haven't run 002_qol.sql yet (missing idempotency_key column)
+      if (/no such column: idempotency_key/i.test(String(e?.message || ''))) {
+        try { await db.exec(`ALTER TABLE orders ADD COLUMN idempotency_key TEXT`); } catch {}
+        try { await db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL`); } catch {}
+        await db.prepare(`
+          INSERT INTO orders (
+            id, order_number, user_id, email, status, currency,
+            subtotal_cents, discount_cents, shipping_cents, tax_cents, total_cents,
+            shipping_method, shipping_address_json, billing_address_json,
+            coupon_code, customer_note, idempotency_key, placed_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, 'ZAR',
+            ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, datetime('now'), datetime('now')
+          )
+        `).run(
+          orderId, orderNumber, user.id, user.email, orderStatus,
+          subtotalCents, couponDiscountCents, shippingCents, taxResult.totalTaxCents, totalCents,
+          input.shippingMethod, shippingAddressJson, shippingAddressJson,
+          appliedCoupon ? appliedCoupon.code : null, input.customerNote?.slice(0, 500) || null, idempotencyKey
+        );
+      } else {
+        throw e;
+      }
+    }
 
     const invoiceItems: InvoiceLineItem[] = [];
 
@@ -323,8 +382,9 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
         UPDATE coupons SET used_count = used_count + 1 WHERE id = ?
       `).run(appliedCoupon.id);
 
+      // OR IGNORE keeps reusable coupons working on pre-002 DBs with UNIQUE(coupon,user)
       await db.prepare(`
-        INSERT INTO coupon_redemptions (id, coupon_id, user_id, order_id, created_at)
+        INSERT OR IGNORE INTO coupon_redemptions (id, coupon_id, user_id, order_id, created_at)
         VALUES (?, ?, ?, ?, datetime('now'))
       `).run(crypto.randomUUID(), appliedCoupon.id, user.id, orderId);
     }

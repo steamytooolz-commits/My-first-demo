@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS coupon_redemptions (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(coupon_id, user_id)
+  UNIQUE(coupon_id, user_id, order_id)
 );
 CREATE TABLE IF NOT EXISTS addresses (
   id TEXT PRIMARY KEY,
@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS orders (
   billing_address_json TEXT,
   coupon_code TEXT,
   customer_note TEXT,
+  idempotency_key TEXT,
   placed_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   CHECK (discount_cents <= subtotal_cents),
@@ -340,6 +341,31 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_invoices_order ON invoices(order_id);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity, entity_id);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_email_ip ON login_attempts(email, ip);
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  reset_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_idempotency ON orders(idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug);
+CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
+CREATE INDEX IF NOT EXISTS idx_products_featured ON products(featured);
+CREATE INDEX IF NOT EXISTS idx_variants_sku ON product_variants(sku);
+CREATE INDEX IF NOT EXISTS idx_variants_active ON product_variants(active);
+CREATE INDEX IF NOT EXISTS idx_orders_number ON orders(order_number);
+CREATE INDEX IF NOT EXISTS idx_orders_placed ON orders(placed_at);
+CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code);
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_variant ON order_items(variant_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_variant ON cart_items(variant_id);
+CREATE INDEX IF NOT EXISTS idx_addresses_user ON addresses(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_stock_variant ON stock_movements(variant_id);
+CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 `;
 
 function ensureSchema(database: Database.Database) {
