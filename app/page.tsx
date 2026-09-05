@@ -8,6 +8,13 @@ import { getStoreSettings } from '@/lib/settings';
 import { formatZar } from '@/lib/money';
 import { ArrowRight, Truck, ShieldCheck, Feather, FileText } from 'lucide-react';
 
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Paper & Quill Stationery — Fine Pens, Journals & Desk Essentials',
+  description: 'South African artisan stationery: fountain pens, Smyth-sewn journals, archival paper. Live demo storefront with cart, checkout, VAT invoices and admin.',
+};
+
 export default async function HomePage() {
   const settings = await getStoreSettings();
   // Fetch active categories with product counts
@@ -38,6 +45,14 @@ export default async function HomePage() {
     ORDER BY p.created_at DESC
     LIMIT 8
   `).all() as any[];
+
+  // Hero showcase: first live featured product (never a hardcoded dead link)
+  const hero = rawFeatured[0] as any | undefined;
+  const heroPriceLabel = hero
+    ? hero.min_price_cents === hero.max_price_cents
+      ? formatZar(hero.min_price_cents)
+      : `${formatZar(hero.min_price_cents)} – ${formatZar(hero.max_price_cents)}`
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -80,27 +95,53 @@ export default async function HomePage() {
                 </div>
               </div>
 
-              {/* Visual Showcase Card */}
+              {/* Visual Showcase Card — live featured product */}
               <div className="lg:col-span-5">
-                <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 p-8 shadow-sm">
-                  <div className="space-y-4">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-teal-800">Featured Highlight</span>
-                    <h3 className="font-serif text-2xl font-bold text-slate-900">Kalahari Executive A4 Hardcover</h3>
-                    <p className="text-sm text-slate-600">
-                      192 numbered pages of 100gsm acid-free ivory paper. Built for fountain pens with zero bleed-through.
-                    </p>
-                    <div className="pt-2 flex items-baseline gap-2">
-                      <span className="text-2xl font-bold text-slate-900">R 245.00</span>
-                      <span className="text-sm text-slate-400 line-through">R 280.00</span>
+                {hero ? (
+                  <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    {hero.image_url && (
+                      <div className="relative h-52 w-full bg-slate-100">
+                        <Image
+                          src={hero.image_url}
+                          alt={hero.name}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 1024px) 100vw, 40vw"
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-3 p-8">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-teal-800">Featured Highlight</span>
+                      <h3 className="font-serif text-2xl font-bold text-slate-900">{hero.name}</h3>
+                      {hero.brand && <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{hero.brand}</p>}
+                      <div className="pt-1 flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-slate-900">{heroPriceLabel}</span>
+                      </div>
+                      <Link
+                        href={`/products/${hero.slug}`}
+                        className="inline-block mt-2 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
+                      >
+                        View Product &amp; Options
+                      </Link>
                     </div>
-                    <Link
-                      href="/products/a4-hardcover-notebook"
-                      className="inline-block mt-4 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
-                    >
-                      View Product &amp; Options
-                    </Link>
                   </div>
-                </div>
+                ) : (
+                  <div className="relative overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 shadow-sm">
+                    <div className="space-y-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-teal-800">Featured Highlight</span>
+                      <h3 className="font-serif text-2xl font-bold text-slate-900">New arrivals landing soon</h3>
+                      <p className="text-sm text-slate-600">
+                        The curation team is stocking the shelves — browse the full catalogue meanwhile.
+                      </p>
+                      <Link
+                        href="/catalog"
+                        className="inline-block mt-4 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
+                      >
+                        Browse Catalogue
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -127,8 +168,8 @@ export default async function HomePage() {
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5 text-teal-800 shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-slate-900">VAT Tax Invoices</p>
-                  <p className="text-[11px] text-slate-500">Official South African invoices</p>
+                  <p className="text-xs font-bold text-slate-900">Official Invoices</p>
+                  <p className="text-[11px] text-slate-500">Tax invoices when VAT-registered</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -157,6 +198,11 @@ export default async function HomePage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+              {categories.length === 0 && (
+                <p className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+                  Categories are being stocked — <Link href="/catalog" className="font-semibold text-teal-800 hover:underline">browse the catalogue</Link> meanwhile.
+                </p>
+              )}
               {categories.map((cat: any) => (
                 <Link
                   key={cat.id}
@@ -196,9 +242,41 @@ export default async function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {rawFeatured.length === 0 && (
+                <p className="col-span-full rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+                  Featured items are being curated — <Link href="/catalog" className="font-semibold text-teal-800 hover:underline">explore everything</Link>.
+                </p>
+              )}
               {rawFeatured.map((product: any) => (
                 <ProductCard key={product.id} product={product} />
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Demo tour — portfolio reviewers see the depth in one glance */}
+        <section className="border-t border-slate-200 bg-white py-14">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            <div className="mb-8">
+              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-slate-900">Take the full tour</h2>
+              <p className="mt-1 text-sm text-slate-500">Storefront, customer portal, trade accounts and admin — all live in this demo.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Link href="/catalog" className="group rounded-xl border border-slate-200 bg-slate-50 p-6 hover:border-teal-700 hover:shadow-md transition-all">
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-teal-800">1. Shop the catalogue</h3>
+                <p className="mt-1 text-xs text-slate-500">Search, filter, variants, cart, coupons and simulated checkout with VAT invoices.</p>
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-teal-800">Start shopping <ArrowRight className="h-3.5 w-3.5" /></span>
+              </Link>
+              <Link href="/account/trade" className="group rounded-xl border border-slate-200 bg-slate-50 p-6 hover:border-teal-700 hover:shadow-md transition-all">
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-teal-800">2. Apply for trade (B2B)</h3>
+                <p className="mt-1 text-xs text-slate-500">Approval-gated business accounts with VAT-detailed invoicing.</p>
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-teal-800">Trade Beta <ArrowRight className="h-3.5 w-3.5" /></span>
+              </Link>
+              <Link href="/admin" className="group rounded-xl border border-slate-200 bg-slate-50 p-6 hover:border-teal-700 hover:shadow-md transition-all">
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-teal-800">3. Run the back office</h3>
+                <p className="mt-1 text-xs text-slate-500">One-page product create, bulk CSV import, stock, orders, coupons and exports.</p>
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-teal-800">Open admin <ArrowRight className="h-3.5 w-3.5" /></span>
+              </Link>
             </div>
           </div>
         </section>
