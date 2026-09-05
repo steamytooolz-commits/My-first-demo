@@ -1,5 +1,6 @@
 import type {Metadata} from 'next';
 import './globals.css'; // Global styles
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased selection:bg-teal-100 selection:text-teal-900" suppressHydrationWarning>
         {children}
+        <WhatsAppButton />
       </body>
     </html>
   );

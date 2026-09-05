@@ -524,7 +524,7 @@ if (isTurso) {
       await q(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'System Administrator', '', 'admin', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, [adminId, adminEmail, hash(adminPassword), now, now, now]);
       await q(`INSERT INTO users (id, email, password_hash, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at) VALUES (?, ?, ?, 'Thabo Mokoena', '', 'customer', 'active', 0, ?, ?, ?) ON CONFLICT(id) DO NOTHING`, ['00000000-0000-4000-a000-000000000002', 'customer@example.com', hash('Customer123!'), now, now, now]);
       await q(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`, [JSON.stringify({
-        store_name: 'Paper & Quill Stationery', contact_email: 'hello@paperandquill.co.za', phone: '', address_line1: '42 Bram Fischer Drive', address_line2: 'Ferndale', city: 'Johannesburg', province: 'Gauteng', postal_code: '2194', country: 'ZA', currency: 'ZAR', tax_enabled: false, tax_rate_percent: 0, prices_include_tax: true, shipping_taxable: true, free_shipping_enabled: true, free_shipping_threshold_cents: 95000, standard_base_cents: 7500, express_base_cents: 15000, weight_threshold_g: 5000, weight_surcharge_cents: 2500, express_weight_surcharge_cents: 5000, invoice_prefix: 'INV', order_prefix: 'ORD', invoice_due_days: 14, bank_name: 'First National Bank', bank_account_name: 'Paper & Quill Stationery (Pty) Ltd', bank_account_number: '62000000000', bank_branch_code: '250655', bank_reference_note: 'Please use your Order Number as payment reference', vat_number: ''
+        store_name: 'Paper & Quill Stationery', contact_email: 'hello@paperandquill.co.za', phone: '', address_line1: '42 Bram Fischer Drive', address_line2: 'Ferndale', city: 'Johannesburg', province: 'Gauteng', postal_code: '2194', country: 'ZA', currency: 'ZAR', tax_enabled: false, tax_rate_percent: 0, prices_include_tax: true, shipping_taxable: true, free_shipping_enabled: true, free_shipping_threshold_cents: 95000, standard_base_cents: 7500, express_base_cents: 15000, weight_threshold_g: 5000, weight_surcharge_cents: 2500, express_weight_surcharge_cents: 5000, invoice_prefix: 'INV', order_prefix: 'ORD', invoice_due_days: 14, bank_name: 'First National Bank', bank_account_name: 'Paper & Quill Stationery (Pty) Ltd', bank_account_number: '62000000000', bank_branch_code: '250655', bank_reference_note: 'Please use your Order Number as payment reference', whatsapp_enabled: false, whatsapp_number: '', vat_number: ''
       })]);
       console.log('[db] Turso seeded admin/customer');
     }
@@ -706,6 +706,8 @@ function ensureDefaultSeed(database: Database.Database) {
           bank_account_number: '62000000000',
           bank_branch_code: '250655',
           bank_reference_note: 'Please use your Order Number as payment reference',
+          whatsapp_enabled: false,
+          whatsapp_number: '',
           vat_number: '',
         };
         database.prepare(`INSERT INTO settings (key, value_json) VALUES ('store', ?) ON CONFLICT(key) DO NOTHING`).run(JSON.stringify(storeSettings));

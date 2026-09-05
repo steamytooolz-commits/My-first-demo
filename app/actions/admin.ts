@@ -595,6 +595,8 @@ export async function adminSaveSettingsAction(prevState: any, formData: FormData
     bank_account_number: String(formData.get('bank_account_number') || '').trim(),
     bank_branch_code: String(formData.get('bank_branch_code') || '').trim(),
     bank_reference_note: String(formData.get('bank_reference_note') || '').trim(),
+    whatsapp_enabled: formData.get('whatsapp_enabled') === 'on',
+    whatsapp_number: String(formData.get('whatsapp_number') || '').replace(/[^\d]/g, '').slice(0, 15),
     vat_number: String(formData.get('vat_number') || '').trim(),
   };
 

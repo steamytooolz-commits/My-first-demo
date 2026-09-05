@@ -10,6 +10,9 @@ import {
   ArrowRight,
   Download,
   Plus,
+  FileSpreadsheet,
+  Landmark,
+  FileText,
 } from 'lucide-react';
 
 export default async function AdminDashboardPage() {
@@ -118,6 +121,54 @@ export default async function AdminDashboardPage() {
           </div>
           <p className="text-2xl font-serif font-bold text-rose-700">{lowStockVariants.length}</p>
           <p className="text-[11px] text-slate-400">At or below threshold</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Save time: 3 money flows (client pitch panel) */}
+        <div className="lg:col-span-12 rounded-xl border border-teal-200 bg-teal-50/60 p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4">
+            <div>
+              <h2 className="font-serif text-lg font-bold text-slate-900">Save time: 3 money flows</h2>
+              <p className="text-xs text-slate-600 mt-0.5">The three admin jobs that win back hours every week — one click each.</p>
+            </div>
+            <span className="text-[11px] font-semibold text-teal-800">Live demo script: import → verify → export</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="rounded-xl border border-teal-200 bg-white p-4 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-slate-900">
+                <FileSpreadsheet className="h-4 w-4 text-teal-800" />
+                <span>1. Load catalogue in bulk</span>
+              </div>
+              <p className="text-slate-600">Drop a supplier price list, confirm columns, import up to 2,000 rows. Re-imports update, never duplicate.</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Link href="/admin/products/import" className="rounded-lg bg-teal-800 px-3 py-1.5 font-semibold text-white hover:bg-teal-900">Import CSV</Link>
+                <a href="/admin/products/import" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">Get template</a>
+              </div>
+            </div>
+            <div className="rounded-xl border border-teal-200 bg-white p-4 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-slate-900">
+                <Landmark className="h-4 w-4 text-teal-800" />
+                <span>2. Verify EFT, clear pending</span>
+              </div>
+              <p className="text-slate-600">{pendingOrdersCount} order{pendingOrdersCount === 1 ? '' : 's'} awaiting payment. Open, confirm funds, mark paid — invoice flips to paid automatically.</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Link href="/admin/orders" className="rounded-lg bg-slate-900 px-3 py-1.5 font-semibold text-white hover:bg-slate-800">Review {pendingOrdersCount} pending</Link>
+              </div>
+            </div>
+            <div className="rounded-xl border border-teal-200 bg-white p-4 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-slate-900">
+                <FileText className="h-4 w-4 text-teal-800" />
+                <span>3. Hand accountant clean books</span>
+              </div>
+              <p className="text-slate-600">SARS-ready VAT totals plus one-click CSVs. No retyping, no month-end scramble.</p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <a href="/api/admin/export/orders" download className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">Orders CSV</a>
+                <a href="/api/admin/export/invoices" download className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">Invoices CSV</a>
+                <a href="/api/admin/export/customers" download className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">Customers CSV</a>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

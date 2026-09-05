@@ -40,6 +40,9 @@ export const storeSettingsSchema = z.object({
   bank_branch_code: z.string().default('250655'),
   bank_reference_note: z.string().default('Please use your Order Number (e.g. ORD-2026-000001) as payment reference'),
 
+  whatsapp_enabled: z.boolean().default(false),
+  whatsapp_number: z.string().default(''),
+
   vat_number: z.string().default(''),
 });
 
@@ -83,6 +86,9 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   bank_account_number: '62000000000',
   bank_branch_code: '250655',
   bank_reference_note: 'Please use your Order Number as payment reference',
+
+  whatsapp_enabled: false,
+  whatsapp_number: '',
 
   vat_number: '',
 };

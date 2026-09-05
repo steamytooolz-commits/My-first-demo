@@ -4,9 +4,12 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import { db } from '@/lib/db';
+import { getStoreSettings } from '@/lib/settings';
+import { formatZar } from '@/lib/money';
 import { ArrowRight, Truck, ShieldCheck, Feather, FileText } from 'lucide-react';
 
 export default async function HomePage() {
+  const settings = await getStoreSettings();
   // Fetch active categories with product counts
   const categories = await db.prepare(`
     SELECT c.id, c.name, c.slug, c.description,
@@ -111,7 +114,7 @@ export default async function HomePage() {
                 <Truck className="h-5 w-5 text-teal-800 shrink-0" />
                 <div>
                   <p className="text-xs font-bold text-slate-900">Free SA Delivery</p>
-                  <p className="text-[11px] text-slate-500">On all orders over R950</p>
+                  <p className="text-[11px] text-slate-500">On all orders over {formatZar(settings.free_shipping_threshold_cents)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

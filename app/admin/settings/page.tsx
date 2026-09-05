@@ -1,6 +1,6 @@
 import { getStoreSettings } from '@/lib/settings';
 import { adminSaveSettingsAction } from '@/app/actions/admin';
-import { Store, Landmark, Truck, FileText, CheckCircle } from 'lucide-react';
+import { Store, Landmark, Truck, MessageCircle } from 'lucide-react';
 
 export default async function AdminSettingsPage() {
   const settings = await getStoreSettings();
@@ -189,6 +189,41 @@ export default async function AdminSettingsPage() {
                 name="bank_reference_note"
                 defaultValue={settings.bank_reference_note}
                 className="w-full rounded-lg border border-slate-200 p-2 focus:border-teal-700 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* WhatsApp Order Help */}
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+          <h2 className="font-serif text-base font-bold text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100">
+            <MessageCircle className="h-4 w-4 text-teal-800" />
+            <span>WhatsApp Order Help</span>
+          </h2>
+          <p className="text-[11px] text-slate-500">
+            Shows a floating WhatsApp chat button on every store page. Use international format without + or spaces, e.g. 27820000000.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                id="whatsapp_enabled"
+                name="whatsapp_enabled"
+                defaultChecked={settings.whatsapp_enabled}
+                className="h-4 w-4 rounded border-slate-300 text-teal-800 focus:ring-teal-700"
+              />
+              <label htmlFor="whatsapp_enabled" className="font-semibold text-slate-700 cursor-pointer">
+                Enable WhatsApp chat button
+              </label>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">WhatsApp Number</label>
+              <input
+                name="whatsapp_number"
+                defaultValue={settings.whatsapp_number || ''}
+                placeholder="27820000000"
+                inputMode="tel"
+                className="w-full rounded-lg border border-slate-200 p-2 font-mono focus:border-teal-700 focus:outline-none"
               />
             </div>
           </div>

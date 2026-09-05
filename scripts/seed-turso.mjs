@@ -99,6 +99,8 @@ await q(`
   bank_account_number: '62000000000',
   bank_branch_code: '250655',
   bank_reference_note: 'Please use your Order Number as payment reference',
+  whatsapp_enabled: false,
+  whatsapp_number: '',
   vat_number: taxEnabled ? '4010293847' : '',
 })]);
 console.log('[seed-turso] Store settings configured.');
