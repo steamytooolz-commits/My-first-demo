@@ -111,7 +111,16 @@ function ensureSchema(db) {
 | **SQLite file (`better-sqlite3`)** | VPS / local single-instance | Deterministic, no cloud needed. Keep `DATABASE_FILE=./data/app.db` (or `/data/app.db` volume mount on Fly.io/Render). Run `bun run db:migrate && bun run db:seed`. |
 | **Ephemeral `/tmp` (fallback)** | Emergency only | No config. Data lost on cold start. Only used on Vercel when `TURSO_DATABASE_URL` is unset. |
 
-### Turso setup (free tier, ~5 minutes)
+### Turso setup — option 1: Vercel Marketplace (one click, recommended)
+
+```text
+Vercel Dashboard → your project → Storage tab → Marketplace
+  → Turso → Add → Create new database → Connect to project → Redeploy
+```
+
+The integration injects `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` automatically (these are exactly the two variables the app reads in `lib/db.ts`). First visit after redeploy auto-creates schema + admin/customer + catalogue — nothing else to run. Confirm linkage in Admin → Dashboard (green “Turso shared (persistent)” badge).
+
+### Turso setup — option 2: manual (free tier, ~5 minutes)
 
 ```bash
 # 1. Install CLI + sign up (browser login, free, no card)

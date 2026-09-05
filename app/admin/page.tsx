@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { db } from '@/lib/db';
+import { db, isTurso } from '@/lib/db';
 import { formatZar } from '@/lib/money';
 import { requireAdmin } from '@/lib/auth';
 import {
@@ -52,6 +52,10 @@ export default async function AdminDashboardPage() {
         <div>
           <h1 className="font-serif text-3xl font-bold text-slate-900">Admin Dashboard</h1>
           <p className="text-xs text-slate-500 mt-1">Real-time stationery store metrics and operations summary.</p>
+          <p className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${isTurso ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${isTurso ? 'bg-emerald-600' : 'bg-amber-600'}`} />
+            {isTurso ? 'Database: Turso shared (persistent)' : 'Database: ephemeral /tmp — connect Turso for persistence'}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
