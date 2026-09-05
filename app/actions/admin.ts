@@ -721,3 +721,54 @@ export async function adminRunMaintenanceAction(): Promise<AdminActionResponse &
     detail: `Abandoned ${result.abandoned} carts, expired ${result.expired} orders, processed ${result.processed} erasures.`,
   };
 }
+
+// -------------------------------------------------------------
+// B2B trade applications (Trade Beta — approval gated)
+// -------------------------------------------------------------
+export async function adminReviewTradeApplicationAction(
+  applicationId: string,
+  decision: 'approved' | 'rejected'
+): Promise<AdminActionResponse> {
+  const admin = await requireAdmin();
+  if (decision !== 'approved' && decision !== 'rejected') {
+    return { success: false, error: 'Invalid decision' };
+  }
+  const app = await db.prepare(`SELECT * FROM trade_applications WHERE id = ?`).get(applicationId) as any;
+  if (!app) return { success: false, error: 'Application not found' };
+  if (app.status !== 'pending') return { success: false, error: 'Application already reviewed' };
+
+  await db.transaction(async () => {
+    await db.prepare(`UPDATE trade_applications SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?`)
+      .run(decision, admin.id, applicationId);
+    try {
+      await db.prepare(`
+        UPDATE users SET account_type = ?, trade_status = ?, business_name = ?, trade_vat_number = ?, cipc_number = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(
+        decision === 'approved' ? 'trade' : 'retail', decision,
+        app.business_name, app.trade_vat_number || '', app.cipc_number || '', app.user_id
+      );
+    } catch (e) {
+      if (/no such column/i.test(String((e as Error)?.message || ''))) {
+        // Pre-003 DB: record the review; user columns backfill on next migrate
+        await db.exec(`ALTER TABLE users ADD COLUMN account_type TEXT NOT NULL DEFAULT 'retail'`).catch(() => {});
+        await db.exec(`ALTER TABLE users ADD COLUMN trade_status TEXT NOT NULL DEFAULT 'none'`).catch(() => {});
+        await db.exec(`ALTER TABLE users ADD COLUMN business_name TEXT NOT NULL DEFAULT ''`).catch(() => {});
+        await db.exec(`ALTER TABLE users ADD COLUMN trade_vat_number TEXT NOT NULL DEFAULT ''`).catch(() => {});
+        await db.exec(`ALTER TABLE users ADD COLUMN cipc_number TEXT NOT NULL DEFAULT ''`).catch(() => {});
+        await db.prepare(`
+          UPDATE users SET account_type = ?, trade_status = ?, business_name = ?, trade_vat_number = ?, cipc_number = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(
+          decision === 'approved' ? 'trade' : 'retail', decision,
+          app.business_name, app.trade_vat_number || '', app.cipc_number || '', app.user_id
+        );
+      } else throw e;
+    }
+    await logAudit(admin.id, `trade_${decision}`, 'trade', app.user_id, { applicationId, business: app.business_name });
+  })();
+
+  revalidatePath('/admin/customers');
+  revalidatePath('/account/trade');
+  return { success: true };
+}

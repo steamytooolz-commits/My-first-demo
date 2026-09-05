@@ -4,7 +4,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { getSessionUser } from '@/lib/auth';
 import { logoutAction } from '@/app/actions/auth';
-import { Package, MapPin, Shield, Lock, User, LogOut } from 'lucide-react';
+import { Package, MapPin, Shield, Lock, User, LogOut, Building2 } from 'lucide-react';
 
 export default async function AccountLayout({
   children,
@@ -54,6 +54,14 @@ export default async function AccountLayout({
               >
                 <MapPin className="h-4 w-4 text-teal-800" />
                 <span>Saved Addresses</span>
+              </Link>
+
+              <Link
+                href="/account/trade"
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              >
+                <Building2 className="h-4 w-4 text-teal-800" />
+                <span>Trade Account (B2B)</span>
               </Link>
 
               <Link

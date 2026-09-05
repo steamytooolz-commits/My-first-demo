@@ -15,9 +15,26 @@ export interface User {
   status: 'active' | 'disabled';
   marketing_consent: number;
   poia_processing_consent_at: string | null;
+  account_type?: 'retail' | 'trade';
+  trade_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  business_name?: string;
+  trade_vat_number?: string;
+  cipc_number?: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+const TRADE_USER_DEFAULTS = {
+  account_type: 'retail',
+  trade_status: 'none',
+  business_name: '',
+  trade_vat_number: '',
+  cipc_number: '',
+} as const;
+
+function withTradeDefaults<T extends object>(row: T): T {
+  return { ...TRADE_USER_DEFAULTS, ...row } as T;
 }
 
 /**
@@ -206,20 +223,39 @@ export async function getSessionUser(): Promise<User | null> {
 
     // 1. Try DB session (fast path, works locally and when DB is shared)
     try {
-      const row = await db.prepare(`
-        SELECT 
-          u.id, u.email, u.full_name, u.phone, u.role, u.status,
-          u.marketing_consent, u.poia_processing_consent_at,
-          u.created_at, u.updated_at, u.deleted_at
-        FROM sessions s
-        JOIN users u ON s.user_id = u.id
-        WHERE s.token_hash = ?
-          AND s.expires_at > ?
-          AND u.status = 'active'
-          AND u.deleted_at IS NULL
-      `).get(tokenHash, now) as User | undefined;
+      let row: User | undefined;
+      try {
+        row = await db.prepare(`
+          SELECT
+            u.id, u.email, u.full_name, u.phone, u.role, u.status,
+            u.marketing_consent, u.poia_processing_consent_at,
+            u.account_type, u.trade_status, u.business_name, u.trade_vat_number, u.cipc_number,
+            u.created_at, u.updated_at, u.deleted_at
+          FROM sessions s
+          JOIN users u ON s.user_id = u.id
+          WHERE s.token_hash = ?
+            AND s.expires_at > ?
+            AND u.status = 'active'
+            AND u.deleted_at IS NULL
+        `).get(tokenHash, now) as User | undefined;
+      } catch (colErr) {
+        // Pre-003 DBs without trade columns — legacy select + defaults
+        if (!/no such column/i.test(String((colErr as Error)?.message || ''))) throw colErr;
+        row = await db.prepare(`
+          SELECT
+            u.id, u.email, u.full_name, u.phone, u.role, u.status,
+            u.marketing_consent, u.poia_processing_consent_at,
+            u.created_at, u.updated_at, u.deleted_at
+          FROM sessions s
+          JOIN users u ON s.user_id = u.id
+          WHERE s.token_hash = ?
+            AND s.expires_at > ?
+            AND u.status = 'active'
+            AND u.deleted_at IS NULL
+        `).get(tokenHash, now) as User | undefined;
+      }
 
-      if (row) return row;
+      if (row) return withTradeDefaults(row);
     } catch (dbErr) {
       console.warn('[auth] DB session lookup failed, trying JWT fallback:', (dbErr as Error).message);
     }
@@ -227,11 +263,21 @@ export async function getSessionUser(): Promise<User | null> {
     // 2. Fallback: stateless JWT verification (survives Vercel per-instance /tmp loss)
     const jwt = verifyJwt(token);
     if (jwt) {
-      const user = await db.prepare(`
-        SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at, deleted_at
-        FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
-      `).get(jwt.sub) as User | undefined;
-      if (user) return user;
+      try {
+        const user = await db.prepare(`
+          SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at,
+            account_type, trade_status, business_name, trade_vat_number, cipc_number, created_at, updated_at, deleted_at
+          FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
+        `).get(jwt.sub) as User | undefined;
+        if (user) return withTradeDefaults(user);
+      } catch (colErr) {
+        if (!/no such column/i.test(String((colErr as Error)?.message || ''))) throw colErr;
+        const user = await db.prepare(`
+          SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at, deleted_at
+          FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
+        `).get(jwt.sub) as User | undefined;
+        if (user) return withTradeDefaults(user);
+      }
     }
 
     return null;

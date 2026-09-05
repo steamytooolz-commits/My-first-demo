@@ -113,3 +113,12 @@ export const categorySchema = z.object({
   active: z.boolean().default(true),
   sort_order: z.number().int().default(0),
 });
+
+export const tradeApplicationSchema = z.object({
+  business_name: z.string().min(2, 'Registered business name is required').max(120),
+  trade_vat_number: z.string().max(20).default(''),
+  cipc_number: z.string().max(30).default(''),
+  contact_person: z.string().min(1, 'Contact person is required').max(120),
+  phone: z.string().min(7, 'A valid contact number is required').max(20),
+  trade_references: z.string().max(1000).default(''),
+});

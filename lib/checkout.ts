@@ -413,12 +413,18 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
       JSON.stringify({ outcome: simOutcome, note: 'Simulated payment processing' })
     );
 
+    const isTrade = (user as any).trade_status === 'approved' || (user as any).account_type === 'trade';
     const buyer: InvoiceBuyer = {
-      name: address.full_name,
+      name: isTrade && (user as any).business_name
+        ? `${(user as any).business_name} — ${address.full_name}`
+        : address.full_name,
       email: user.email,
       phone: address.phone,
       address_line1: address.line1,
-      address_line2: address.line2 || '',
+      address_line2: [
+        address.line2 || '',
+        isTrade && (user as any).trade_vat_number ? `VAT ${(user as any).trade_vat_number}` : '',
+      ].filter(Boolean).join(' • '),
       city: address.city,
       province: address.province,
       postal_code: address.postal_code,

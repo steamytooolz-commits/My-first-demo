@@ -9,13 +9,25 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const customers = await db.prepare(`
-    SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status,
-           u.poia_processing_consent_at, u.marketing_consent, u.created_at,
-           (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count
-    FROM users u
-    ORDER BY u.created_at DESC
-  `).all() as any[];
+  let customers: any[] = [];
+  try {
+    customers = await db.prepare(`
+      SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status,
+             u.poia_processing_consent_at, u.marketing_consent, u.created_at,
+             u.account_type, u.trade_status, u.business_name, u.trade_vat_number,
+             (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count
+      FROM users u
+      ORDER BY u.created_at DESC
+    `).all() as any[];
+  } catch {
+    customers = await db.prepare(`
+      SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status,
+             u.poia_processing_consent_at, u.marketing_consent, u.created_at,
+             (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count
+      FROM users u
+      ORDER BY u.created_at DESC
+    `).all() as any[];
+  }
 
   const headers = [
     'User ID',
@@ -23,6 +35,10 @@ export async function GET() {
     'Email Address',
     'Phone',
     'Role',
+    'Account Type',
+    'Trade Status',
+    'Business Name',
+    'Trade VAT No',
     'Status',
     'POPIA Processing Consented At',
     'Marketing Consent',
@@ -36,6 +52,10 @@ export async function GET() {
     c.email,
     c.phone || '',
     c.role,
+    c.account_type || 'retail',
+    c.trade_status || 'none',
+    c.business_name || '',
+    c.trade_vat_number || '',
     c.status,
     c.poia_processing_consent_at || 'Not Consented',
     c.marketing_consent === 1 ? 'Opted In' : 'No',

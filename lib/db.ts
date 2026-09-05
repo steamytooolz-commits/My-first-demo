@@ -72,6 +72,11 @@ CREATE TABLE IF NOT EXISTS users (
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
   marketing_consent INTEGER NOT NULL DEFAULT 0 CHECK (marketing_consent IN (0,1)),
   poia_processing_consent_at TEXT,
+  account_type TEXT NOT NULL DEFAULT 'retail',
+  trade_status TEXT NOT NULL DEFAULT 'none',
+  business_name TEXT NOT NULL DEFAULT '',
+  trade_vat_number TEXT NOT NULL DEFAULT '',
+  cipc_number TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   deleted_at TEXT
@@ -332,6 +337,23 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   success INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS trade_applications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  business_name TEXT NOT NULL,
+  trade_vat_number TEXT NOT NULL DEFAULT '',
+  cipc_number TEXT NOT NULL DEFAULT '',
+  contact_person TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  trade_references TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_trade_apps_user ON trade_applications(user_id);
+CREATE INDEX IF NOT EXISTS idx_trade_apps_status ON trade_applications(status);
+CREATE INDEX IF NOT EXISTS idx_users_trade_status ON users(trade_status);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_variants_product ON product_variants(product_id);
