@@ -206,7 +206,7 @@ export function parsePriceToCents(raw: string | null | undefined): number | null
   if (raw == null) return null;
   let s = String(raw).trim();
   if (!s) return null;
-  s = s.replace(/R\s?/gi, '').replace(/ZAR/gi, '').replace(/[$€£]/g, '').replace(/\s/g, '');
+  s = s.replace(/ZAR/gi, '').replace(/R\s?/gi, '').replace(/[$€£]/g, '').replace(/\s/g, '');
   if (!s || s === '-') return null;
   const hasComma = s.includes(',');
   const hasDot = s.includes('.');
