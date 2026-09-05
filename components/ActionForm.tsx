@@ -42,7 +42,7 @@ export default function ActionForm({ action, children, className, successMessage
   }
 
   return (
-    <form action={handleSubmit} className={className} aria-busy={isPending}>
+    <form onSubmit={handleSubmit} className={className} aria-busy={isPending}>
       {error && (
         <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs font-medium text-rose-800 flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />

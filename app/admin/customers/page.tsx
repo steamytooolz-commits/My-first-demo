@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { adminExecuteErasureAction, adminReviewTradeApplicationAction } from '@/app/actions/admin';
-import { Users, Shield, Download, CheckCircle, Trash2, Clock, Building2 } from 'lucide-react';
+import { Shield, Download, Trash2, Building2 } from 'lucide-react';
 import ActionForm from '@/components/ActionForm';
 
 export default async function AdminCustomersPage() {

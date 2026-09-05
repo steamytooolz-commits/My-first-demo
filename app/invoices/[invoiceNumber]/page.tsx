@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { getStoreSettings } from '@/lib/settings';
 import { formatZar } from '@/lib/money';
-import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 

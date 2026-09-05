@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
-import { Download, FileText, Eye } from 'lucide-react';
+import { Download, FileText } from 'lucide-react';
 
 export default async function AdminInvoicesPage() {
   const invoices = await db.prepare(`

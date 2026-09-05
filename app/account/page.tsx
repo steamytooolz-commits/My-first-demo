@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
 import { updateProfileAction } from '@/app/actions/auth';
 import ActionForm from '@/components/ActionForm';
-import { Package, ArrowRight, CheckCircle, Clock } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 export default async function AccountOverviewPage() {
   const user = await requireUser();

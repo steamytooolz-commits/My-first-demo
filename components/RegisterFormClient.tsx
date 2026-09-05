@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { registerAction } from '@/app/actions/auth';
-import { AlertCircle, ShieldCheck } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 function safeRedirect(raw: string | null | undefined): string {
   const v = String(raw || '').trim();

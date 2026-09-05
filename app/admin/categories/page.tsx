@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { adminSaveCategoryAction, adminDeleteCategoryAction } from '@/app/actions/admin';
 import ActionForm from '@/components/ActionForm';
-import { Layers, Plus, Trash2, Edit } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 export default async function AdminCategoriesPage() {
   const categories = await db.prepare(`

@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
 import { adminSaveCouponAction, adminDeleteCouponAction } from '@/app/actions/admin';
 import ActionForm from '@/components/ActionForm';
-import { Tag, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 export default async function AdminCouponsPage() {
   const coupons = await db.prepare('SELECT * FROM coupons ORDER BY created_at DESC').all() as any[];

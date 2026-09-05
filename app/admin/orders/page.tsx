@@ -2,7 +2,7 @@ import Link from 'next/link';
 import AutoSubmitSelect from '@/components/AutoSubmitSelect';
 import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
-import { Download, Search, Eye, Filter } from 'lucide-react';
+import { Download, Search, Eye } from 'lucide-react';
 
 interface AdminOrdersPageProps {
   searchParams: Promise<{ status?: string; q?: string }>;

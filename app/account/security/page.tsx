@@ -1,7 +1,6 @@
 import { requireUser } from '@/lib/auth';
 import { changePasswordAction } from '@/app/actions/auth';
 import ActionForm from '@/components/ActionForm';
-import { Lock } from 'lucide-react';
 
 export default async function CustomerSecurityPage() {
   await requireUser();

@@ -120,8 +120,3 @@ export async function updateStoreSettings(settings: Partial<StoreSettings>): Pro
 
   return validated;
 }
-
-// Sync wrapper for places that cannot be async yet (fallback to default if not awaited)
-export function getStoreSettingsSync(): StoreSettings {
-  return DEFAULT_STORE_SETTINGS;
-}

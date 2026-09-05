@@ -2,7 +2,7 @@ import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { saveAddressAction, deleteAddressAction, setDefaultAddressAction } from '@/app/actions/addresses';
 import ActionForm from '@/components/ActionForm';
-import { MapPin, Plus, Trash2, CheckCircle } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
 export default async function CustomerAddressesPage() {
   const user = await requireUser();

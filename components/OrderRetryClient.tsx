@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { retryPaymentAction } from '@/app/actions/checkout';
-import { CreditCard, Check, AlertCircle } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 
 export default function OrderRetryClient({ orderId }: { orderId: string }) {
   const [outcome, setOutcome] = useState<'success' | 'declined' | 'pending'>('success');
