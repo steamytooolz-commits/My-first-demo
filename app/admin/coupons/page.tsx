@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
 import { adminSaveCouponAction, adminDeleteCouponAction } from '@/app/actions/admin';
+import ActionForm from '@/components/ActionForm';
 import { Tag, Plus, Trash2 } from 'lucide-react';
 
 export default async function AdminCouponsPage() {
@@ -44,14 +45,14 @@ export default async function AdminCouponsPage() {
                   </p>
                 </div>
 
-                <form action={async () => {
+                <ActionForm action={async () => {
                   'use server';
-                  await adminDeleteCouponAction(c.id);
+                  return adminDeleteCouponAction(c.id);
                 }}>
                   <button type="submit" className="text-rose-600 hover:text-rose-800 p-1" title="Delete coupon">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                </form>
+                </ActionForm>
               </div>
             ))}
           </div>
@@ -64,10 +65,10 @@ export default async function AdminCouponsPage() {
             <span>Create Promotional Coupon</span>
           </h2>
 
-          <form action={async (formData: FormData) => {
+          <ActionForm action={async (formData: FormData) => {
             'use server';
-            await adminSaveCouponAction(null, formData);
-          }} className="space-y-4 text-xs">
+            return adminSaveCouponAction(null, formData);
+          }} successMessage="Coupon saved." className="space-y-4 text-xs">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Coupon Code *</label>
               <input
@@ -181,7 +182,7 @@ export default async function AdminCouponsPage() {
             >
               Save Coupon
             </button>
-          </form>
+          </ActionForm>
         </div>
       </div>
     </div>

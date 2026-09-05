@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import crypto from 'node:crypto';
 import { db } from '@/lib/db';
 import {
@@ -12,6 +12,8 @@ import {
   destroySession,
   getSessionUser,
   requireUser,
+  hashSessionToken,
+  SESSION_COOKIE_NAME,
 } from '@/lib/auth';
 import { mergeGuestCart } from '@/lib/cart';
 import { checkLoginThrottle, recordLoginAttempt, checkRateLimit } from '@/lib/rate-limit';
@@ -231,6 +233,19 @@ export async function changePasswordAction(prevState: any, formData: FormData): 
   await db.prepare(`
     UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?
   `).run(newHash, user.id);
+
+  // Revoke all OTHER sessions: a stolen cookie must die with the old password.
+  // (Opaque/JWT tokens without a DB row already fail closed.)
+  try {
+    const cookieStore = await cookies();
+    const current = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    if (current) {
+      const currentHash = hashSessionToken(current);
+      await db.prepare(`DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`).run(user.id, currentHash);
+    } else {
+      await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(user.id);
+    }
+  } catch {}
 
   revalidatePath('/account');
   return { success: true };

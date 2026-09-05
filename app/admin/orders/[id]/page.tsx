@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
 import { adminUpdateOrderStatusAction } from '@/app/actions/admin';
+import ActionForm from '@/components/ActionForm';
 import { ArrowLeft, FileText, CheckCircle, Truck, XCircle, Clock } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
           >
             <FileText className="h-4 w-4 text-teal-800" />
-            <span>View Tax Invoice ({invoice.invoice_number})</span>
+            <span>View Invoice ({invoice.invoice_number})</span>
           </Link>
         )}
       </div>
@@ -65,12 +66,12 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           Updating status triggers timestamped order event logs and inventory reconciliations (such as stock restoration on cancellation).
         </p>
 
-        <form action={async (formData: FormData) => {
+        <ActionForm action={async (formData: FormData) => {
           'use server';
           const newStatus = formData.get('status') as string;
           const note = (formData.get('note') as string) || '';
-          await adminUpdateOrderStatusAction(order.id, newStatus, note);
-        }} className="flex flex-wrap items-end gap-3 text-xs">
+          return adminUpdateOrderStatusAction(order.id, newStatus, note);
+        }} successMessage="Order status updated." className="flex flex-wrap items-end gap-3 text-xs">
           <input type="hidden" name="orderId" value={order.id} />
 
           <div>
@@ -104,7 +105,7 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           >
             Apply Status Update
           </button>
-        </form>
+        </ActionForm>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

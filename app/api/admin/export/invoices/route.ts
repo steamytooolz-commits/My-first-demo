@@ -48,6 +48,7 @@ export async function GET() {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
+      'Cache-Control': 'no-store',
       'Content-Disposition': `attachment; filename="invoices-export-${new Date().toISOString().slice(0, 10)}.csv"`,
     },
   });

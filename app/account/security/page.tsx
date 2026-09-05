@@ -1,5 +1,6 @@
 import { requireUser } from '@/lib/auth';
 import { changePasswordAction } from '@/app/actions/auth';
+import ActionForm from '@/components/ActionForm';
 import { Lock } from 'lucide-react';
 
 export default async function CustomerSecurityPage() {
@@ -12,10 +13,10 @@ export default async function CustomerSecurityPage() {
         <p className="text-xs text-slate-500 mt-1">Update your password using our secure scrypt hashing protocol.</p>
       </div>
 
-      <form action={async (formData: FormData) => {
+      <ActionForm action={async (formData: FormData) => {
         'use server';
-        await changePasswordAction(null, formData);
-      }} className="max-w-md space-y-4 text-xs">
+        return changePasswordAction(null, formData);
+      }} successMessage="Password changed. Other sessions were signed out." className="max-w-md space-y-4 text-xs">
         <div>
           <label className="block font-semibold text-slate-700 mb-1">Current Password</label>
           <input
@@ -55,7 +56,7 @@ export default async function CustomerSecurityPage() {
         >
           Update Password
         </button>
-      </form>
+      </ActionForm>
     </div>
   );
 }

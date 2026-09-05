@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { formatZar } from '@/lib/money';
-import { ShoppingBag } from 'lucide-react';
-import { addToCartAction } from '@/app/actions/cart';
+import QuickAddButton from '@/components/QuickAddButton';
 
 interface ProductCardProps {
   product: {
@@ -92,20 +91,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
           {/* Quick Add Button */}
           {!isOutOfStock && product.variant_count === 1 ? (
-            <form action={async (formData: FormData) => {
-              'use server';
-              await addToCartAction(null, formData);
-            }}>
-              <input type="hidden" name="variantId" value={product.default_variant_id} />
-              <input type="hidden" name="qty" value="1" />
-              <button
-                type="submit"
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-800 text-white hover:bg-teal-900 shadow-sm transition-colors"
-                title="Add to cart"
-              >
-                <ShoppingBag className="h-4 w-4" />
-              </button>
-            </form>
+            <QuickAddButton variantId={product.default_variant_id} />
           ) : (
             <Link
               href={`/products/${product.slug}`}

@@ -3,6 +3,7 @@ import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { formatZar } from '@/lib/money';
 import { updateProfileAction } from '@/app/actions/auth';
+import ActionForm from '@/components/ActionForm';
 import { Package, ArrowRight, CheckCircle, Clock } from 'lucide-react';
 
 export default async function AccountOverviewPage() {
@@ -36,10 +37,10 @@ export default async function AccountOverviewPage() {
       {/* Profile Form */}
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <h2 className="font-serif text-lg font-bold text-slate-900">Personal Information</h2>
-        <form action={async (formData: FormData) => {
+        <ActionForm action={async (formData: FormData) => {
           'use server';
-          await updateProfileAction(null, formData);
-        }} className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          return updateProfileAction(null, formData);
+        }} successMessage="Profile updated." className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Full Name</label>
             <input
@@ -93,7 +94,7 @@ export default async function AccountOverviewPage() {
               Save Profile Changes
             </button>
           </div>
-        </form>
+        </ActionForm>
       </div>
 
       {/* Recent Orders Preview */}

@@ -489,8 +489,16 @@ export async function updateCartItemQuantity(variantId: string, qty: number): Pr
     return { success: true };
   }
 
-  const variant = await db.prepare('SELECT stock_qty, price_cents FROM product_variants WHERE id = ?').get(variantId) as { stock_qty: number; price_cents: number } | undefined;
+  const variant = await db.prepare(`
+    SELECT pv.stock_qty, pv.price_cents, pv.active as variant_active, p.active as product_active
+    FROM product_variants pv
+    JOIN products p ON pv.product_id = p.id
+    WHERE pv.id = ?
+  `).get(variantId) as { stock_qty: number; price_cents: number; variant_active: number; product_active: number } | undefined;
   if (!variant) return { success: false, error: 'Product variant not found' };
+  if (!variant.variant_active || !variant.product_active) {
+    return { success: false, error: 'This item is no longer available and will be removed at checkout.' };
+  }
 
   if (qty > variant.stock_qty) {
     return { success: false, error: `Only ${variant.stock_qty} available in stock` };

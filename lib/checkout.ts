@@ -125,6 +125,10 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
       return { success: false, error: 'Please select a valid shipping address' };
     }
 
+    if (input.paymentMethod === 'pay_on_delivery' && address.province !== 'Gauteng') {
+      return { success: false, error: 'Pay on delivery is available in Gauteng only. Please choose card or EFT.' };
+    }
+
     const settings = await getStoreSettings();
 
     let couponDiscountCents = 0;
@@ -381,9 +385,14 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
     }
 
     if (appliedCoupon) {
-      await db.prepare(`
-        UPDATE coupons SET used_count = used_count + 1 WHERE id = ?
-      `).run(appliedCoupon.id);
+      // Atomic guard: only one concurrent checkout can consume the last use.
+      const couponUpdate = await db.prepare(`
+        UPDATE coupons SET used_count = used_count + 1
+        WHERE id = ? AND (usage_limit IS NULL OR used_count < usage_limit)
+      `).run(appliedCoupon.id) as any;
+      if (Number(couponUpdate?.changes ?? 0) < 1) {
+        throw new Error('COUPON_LIMIT_REACHED');
+      }
 
       // OR IGNORE keeps reusable coupons working on pre-002 DBs with UNIQUE(coupon,user)
       await db.prepare(`
@@ -474,6 +483,9 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
   } catch (e: any) {
     const msg = String(e?.message || '');
     if (/insufficient stock/i.test(msg)) return { success: false, error: msg };
+    if (/COUPON_LIMIT_REACHED/i.test(msg)) {
+      return { success: false, error: 'This coupon just reached its usage limit. Remove it in the cart and place the order again.' };
+    }
     throw e;
   }
 }

@@ -1,6 +1,7 @@
 import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { requestErasureAction } from '@/app/actions/privacy';
+import ActionForm from '@/components/ActionForm';
 import { ShieldCheck, Download, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
 
 export default async function CustomerPrivacyPage() {
@@ -79,10 +80,10 @@ export default async function CustomerPrivacyPage() {
             </p>
           </div>
         ) : (
-          <form action={async (formData: FormData) => {
+          <ActionForm action={async (formData: FormData) => {
             'use server';
-            await requestErasureAction(null, formData);
-          }} className="space-y-4 text-xs">
+            return requestErasureAction(null, formData);
+          }} successMessage="Erasure request recorded." className="space-y-4 text-xs">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">
                 Reason for Erasure Request (Optional)
@@ -128,7 +129,7 @@ export default async function CustomerPrivacyPage() {
               <Trash2 className="h-4 w-4" />
               <span>Request Account Erasure</span>
             </button>
-          </form>
+          </ActionForm>
         )}
       </div>
     </div>

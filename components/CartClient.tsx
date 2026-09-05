@@ -28,6 +28,7 @@ export default function CartClient({ initialCart, settings }: CartClientProps) {
   const [couponError, setCouponError] = useState<string | null>(initialCart.couponWarning || null);
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [loadingVariantId, setLoadingVariantId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const { items, subtotalCents, discountCents, shippingCents, taxCents, totalCents, shippingMethod, freeShippingProgress } = initialCart;
   const thresholdLabel = formatZar(settings?.free_shipping_threshold_cents ?? freeShippingProgress.thresholdCents);
@@ -37,18 +38,24 @@ export default function CartClient({ initialCart, settings }: CartClientProps) {
   async function handleQtyChange(variantId: string, currentQty: number, delta: number) {
     const newQty = currentQty + delta;
     setLoadingVariantId(variantId);
-    await updateCartItemAction(variantId, newQty);
+    setActionError(null);
+    const res = await updateCartItemAction(variantId, newQty);
     setLoadingVariantId(null);
+    if (!res.success) setActionError(res.error || 'Could not update quantity.');
   }
 
   async function handleRemove(variantId: string) {
     setLoadingVariantId(variantId);
-    await removeCartItemAction(variantId);
+    setActionError(null);
+    const res = await removeCartItemAction(variantId);
     setLoadingVariantId(null);
+    if (!res.success) setActionError(res.error || 'Could not remove item.');
   }
 
   async function handleShippingChange(method: 'pickup' | 'standard' | 'express') {
-    await setShippingMethodAction(method);
+    setActionError(null);
+    const res = await setShippingMethodAction(method);
+    if (!res.success) setActionError(res.error || 'Could not change delivery method.');
   }
 
   async function handleApplyCoupon(e: React.FormEvent) {
@@ -98,6 +105,12 @@ export default function CartClient({ initialCart, settings }: CartClientProps) {
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 my-8">
       {/* Items & Shipping column */}
       <div className="lg:col-span-8 space-y-6">
+        {actionError && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>{actionError}</span>
+          </div>
+        )}
         {/* Free shipping progress bar */}
         {freeShippingProgress.enabled && (
           <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">

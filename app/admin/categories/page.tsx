@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { adminSaveCategoryAction, adminDeleteCategoryAction } from '@/app/actions/admin';
+import ActionForm from '@/components/ActionForm';
 import { Layers, Plus, Trash2, Edit } from 'lucide-react';
 
 export default async function AdminCategoriesPage() {
@@ -41,9 +42,9 @@ export default async function AdminCategoriesPage() {
                     {c.product_count} items
                   </span>
 
-                  <form action={async () => {
+                  <ActionForm action={async () => {
                     'use server';
-                    await adminDeleteCategoryAction(c.id);
+                    return adminDeleteCategoryAction(c.id);
                   }}>
                     <button
                       type="submit"
@@ -53,7 +54,7 @@ export default async function AdminCategoriesPage() {
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
-                  </form>
+                  </ActionForm>
                 </div>
               </div>
             ))}
@@ -67,10 +68,10 @@ export default async function AdminCategoriesPage() {
             <span>Add New Category</span>
           </h2>
 
-          <form action={async (formData: FormData) => {
+          <ActionForm action={async (formData: FormData) => {
             'use server';
-            await adminSaveCategoryAction(null, formData);
-          }} className="space-y-4 text-xs">
+            return adminSaveCategoryAction(null, formData);
+          }} successMessage="Category saved." className="space-y-4 text-xs">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Category Name *</label>
               <input
@@ -130,7 +131,7 @@ export default async function AdminCategoriesPage() {
             >
               Create Category
             </button>
-          </form>
+          </ActionForm>
         </div>
       </div>
     </div>

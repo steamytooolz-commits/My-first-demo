@@ -67,6 +67,12 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
   const sellerEmail = seller.contact_email || settings.contact_email;
   const sellerPhone = seller.phone ?? settings.phone;
   const sellerVat = seller.vat_number ?? settings.vat_number;
+  // Money-moving details come from the frozen snapshot: a later bank change
+  // must never rewrite historic unpaid invoices (TAA s30 record integrity).
+  const sellerBankName = seller.bank_name || settings.bank_name;
+  const sellerBankAccountName = seller.bank_account_name || settings.bank_account_name;
+  const sellerBankAccountNumber = seller.bank_account_number || settings.bank_account_number;
+  const sellerBankBranch = seller.bank_branch_code || settings.bank_branch_code;
 
   let buyer: any = {};
   try {
@@ -165,7 +171,7 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
               Fulfilment &amp; Delivery Method
             </h3>
             <p className="text-slate-800 font-semibold capitalize">{invoice.shipping_method} Delivery</p>
-            <p className="text-slate-500 text-[11px] mt-1">Dispatched from Johannesburg Central Hub</p>
+            <p className="text-slate-500 text-[11px] mt-1">Dispatched from {sellerCity || 'Johannesburg'} Central Hub</p>
           </div>
         </div>
 
@@ -178,7 +184,7 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
                 <th className="py-2.5 text-center">Qty</th>
                 <th className="py-2.5 text-right">Unit Price</th>
                 <th className="py-2.5 text-right">Discount</th>
-                <th className="py-2.5 text-right">{isTaxInvoice ? 'VAT (15%)' : 'Tax'}</th>
+                <th className="py-2.5 text-right">{isTaxInvoice && settings.tax_rate_percent > 0 ? `VAT (${settings.tax_rate_percent}%)` : 'Tax'}</th>
                 <th className="py-2.5 text-right">Total (Incl)</th>
               </tr>
             </thead>
@@ -195,7 +201,7 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
                     <td className="py-3 text-center font-medium text-slate-800">{item.qty}</td>
                     <td className="py-3 text-right text-slate-700">{formatZar(item.unit_price_cents)}</td>
                     <td className="py-3 text-right text-emerald-700">
-                      {discount > 0 ? `-${formatZar(discount)}` : 'R 0.00'}
+                      {discount > 0 ? `-${formatZar(discount)}` : formatZar(0)}
                     </td>
                     <td className="py-3 text-right text-slate-600">{formatZar(item.tax_cents || 0)}</td>
                     <td className="py-3 text-right font-bold text-slate-900">{formatZar(total)}</td>
@@ -215,10 +221,10 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
               Electronic Funds Transfer (EFT) Details
             </h4>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 font-mono text-[11px] space-y-1 text-slate-700">
-              <p><span className="text-slate-400">Bank Name: </span><strong>{settings.bank_name}</strong></p>
-              <p><span className="text-slate-400">Account Name: </span><strong>{settings.bank_account_name}</strong></p>
-              <p><span className="text-slate-400">Account Number: </span><strong>{settings.bank_account_number}</strong></p>
-              <p><span className="text-slate-400">Branch Code: </span><strong>{settings.bank_branch_code}</strong></p>
+              <p><span className="text-slate-400">Bank Name: </span><strong>{sellerBankName}</strong></p>
+              <p><span className="text-slate-400">Account Name: </span><strong>{sellerBankAccountName}</strong></p>
+              <p><span className="text-slate-400">Account Number: </span><strong>{sellerBankAccountNumber}</strong></p>
+              <p><span className="text-slate-400">Branch Code: </span><strong>{sellerBankBranch}</strong></p>
               <p><span className="text-slate-400">Payment Reference: </span><strong className="text-teal-900">{invoice.invoice_number}</strong></p>
             </div>
             <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -250,7 +256,7 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
 
             {Number(invoice.tax_cents || 0) > 0 && (
             <div className="flex justify-between text-slate-500 text-[11px]">
-              <span>VAT Included (15%)</span>
+              <span>{settings.tax_rate_percent > 0 ? `VAT Included (${settings.tax_rate_percent}%)` : 'Tax Included'}</span>
               <span>{formatZar(invoice.tax_cents)}</span>
             </div>
             )}

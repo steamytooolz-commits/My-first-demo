@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { getSessionUser } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { executeCheckout, retryOrderPayment } from '@/lib/checkout';
 
 export interface CheckoutActionResponse {
@@ -66,6 +67,11 @@ export async function retryPaymentAction(orderId: string, outcome: 'success' | '
   if (!user) return { success: false, error: 'Unauthorized' };
   if (!orderId || outcome !== 'success' && outcome !== 'declined' && outcome !== 'pending') {
     return { success: false, error: 'Invalid payment retry request.' };
+  }
+  // Payment-event spam guard: 10 retries per order per 15 minutes
+  const retryLimit = await checkRateLimit(`retry:${user.id}:${orderId}`, 10, 15 * 60 * 1000);
+  if (!retryLimit.allowed) {
+    return { success: false, error: `Too many retries. Try again in ${retryLimit.retryAfterSeconds}s.` };
   }
 
   const result = await retryOrderPayment(orderId, user.id, outcome);

@@ -1,6 +1,7 @@
 import { requireUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { saveAddressAction, deleteAddressAction, setDefaultAddressAction } from '@/app/actions/addresses';
+import ActionForm from '@/components/ActionForm';
 import { MapPin, Plus, Trash2, CheckCircle } from 'lucide-react';
 
 export default async function CustomerAddressesPage() {
@@ -45,25 +46,25 @@ export default async function CustomerAddressesPage() {
 
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                   {addr.is_default !== 1 && (
-                    <form action={async () => {
+                    <ActionForm action={async () => {
                       'use server';
-                      await setDefaultAddressAction(addr.id);
+                      return setDefaultAddressAction(addr.id);
                     }}>
                       <button type="submit" className="text-[11px] font-medium text-teal-800 hover:underline">
                         Set as Default
                       </button>
-                    </form>
+                    </ActionForm>
                   )}
 
-                  <form action={async () => {
+                  <ActionForm action={async () => {
                     'use server';
-                    await deleteAddressAction(addr.id);
+                    return deleteAddressAction(addr.id);
                   }} className="ml-auto">
                     <button type="submit" className="text-[11px] text-rose-600 hover:underline flex items-center gap-1">
                       <Trash2 className="h-3 w-3" />
                       <span>Delete</span>
                     </button>
-                  </form>
+                  </ActionForm>
                 </div>
               </div>
             ))}
@@ -75,10 +76,10 @@ export default async function CustomerAddressesPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <h3 className="font-serif text-base font-bold text-slate-900">Add New Address</h3>
 
-        <form action={async (formData: FormData) => {
+        <ActionForm action={async (formData: FormData) => {
           'use server';
-          await saveAddressAction(null, formData);
-        }} className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          return saveAddressAction(null, formData);
+        }} successMessage="Address saved." className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Address Label</label>
             <input
@@ -189,7 +190,7 @@ export default async function CustomerAddressesPage() {
               Save Address
             </button>
           </div>
-        </form>
+        </ActionForm>
       </div>
     </div>
   );

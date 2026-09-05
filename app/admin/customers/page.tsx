@@ -1,12 +1,15 @@
 import { db } from '@/lib/db';
 import { adminExecuteErasureAction, adminReviewTradeApplicationAction } from '@/app/actions/admin';
 import { Users, Shield, Download, CheckCircle, Trash2, Clock, Building2 } from 'lucide-react';
+import ActionForm from '@/components/ActionForm';
 
 export default async function AdminCustomersPage() {
   let customers: any[] = [];
   try {
     customers = await db.prepare(`
-      SELECT u.*,
+      SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status,
+             u.marketing_consent, u.poia_processing_consent_at,
+             u.account_type, u.trade_status, u.business_name, u.created_at,
              (SELECT COUNT(*) FROM orders WHERE user_id = u.id) as order_count
       FROM users u
       ORDER BY u.created_at DESC
@@ -94,9 +97,9 @@ export default async function AdminCustomersPage() {
                 </div>
 
                 {pr.status === 'pending' && (
-                  <form action={async () => {
+                  <ActionForm action={async () => {
                     'use server';
-                    await adminExecuteErasureAction(pr.id);
+                    return adminExecuteErasureAction(pr.id);
                   }}>
                     <button
                       type="submit"
@@ -105,7 +108,7 @@ export default async function AdminCustomersPage() {
                       <Trash2 className="h-3.5 w-3.5" />
                       <span>Execute Erasure Now</span>
                     </button>
-                  </form>
+                  </ActionForm>
                 )}
               </div>
             ))}
@@ -145,22 +148,22 @@ export default async function AdminCustomersPage() {
 
                 {ta.status === 'pending' && (
                   <div className="flex items-center gap-2">
-                    <form action={async () => {
+                    <ActionForm action={async () => {
                       'use server';
-                      await adminReviewTradeApplicationAction(ta.id, 'approved');
+                      return adminReviewTradeApplicationAction(ta.id, 'approved');
                     }}>
                       <button type="submit" className="rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 transition-colors">
                         Approve
                       </button>
-                    </form>
-                    <form action={async () => {
+                    </ActionForm>
+                    <ActionForm action={async () => {
                       'use server';
-                      await adminReviewTradeApplicationAction(ta.id, 'rejected');
+                      return adminReviewTradeApplicationAction(ta.id, 'rejected');
                     }}>
                       <button type="submit" className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
                         Reject
                       </button>
-                    </form>
+                    </ActionForm>
                   </div>
                 )}
               </div>
