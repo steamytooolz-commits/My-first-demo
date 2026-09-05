@@ -64,6 +64,7 @@ describe('staging smoke', () => {
       'app/admin/page.tsx',
       'app/admin/products/page.tsx',
       'app/admin/products/new/page.tsx',
+      'app/admin/backups/page.tsx',
       'app/invoices/[invoiceNumber]/page.tsx',
       'app/api/account/export/route.ts',
     ];

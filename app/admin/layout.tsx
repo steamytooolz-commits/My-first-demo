@@ -11,6 +11,7 @@ import {
   Users,
   Settings,
   ShieldAlert,
+  Archive,
   ArrowLeft,
 } from 'lucide-react';
 
@@ -110,6 +111,14 @@ export default async function AdminLayout({
           >
             <ShieldAlert className="h-4 w-4 text-teal-400" />
             <span>Audit Trail Logs</span>
+          </Link>
+
+          <Link
+            href="/admin/backups"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+          >
+            <Archive className="h-4 w-4 text-teal-400" />
+            <span>Backups &amp; Transfer</span>
           </Link>
         </nav>
 
