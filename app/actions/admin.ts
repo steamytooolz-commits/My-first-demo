@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { db } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
-import { updateStoreSettings } from '@/lib/settings';
+import { updateStoreSettings, getStoreSettings } from '@/lib/settings';
 import { processErasure } from '@/lib/privacy';
 import { productSchema, variantSchema, categorySchema, couponSchema, isSafeImageUrl } from '@/lib/validation';
 import { parseCsv, suggestMapping, executeProductImport } from '@/lib/csv-import';
@@ -574,37 +574,62 @@ export async function adminDeleteCouponAction(couponId: string): Promise<AdminAc
 // -------------------------------------------------------------
 export async function adminSaveSettingsAction(prevState: any, formData: FormData): Promise<AdminActionResponse> {
   const admin = await requireAdmin();
+  const current = await getStoreSettings();
+
+  // Safe number parsing: blank/invalid inputs fall back to the STORED value,
+  // never NaN (which failed validation silently) and never 0-wipes.
+  const randToCents = (key: string, fallbackCents: number): number => {
+    const raw = String(formData.get(key) ?? '').trim();
+    if (!raw) return fallbackCents;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : fallbackCents;
+  };
+  const intOr = (key: string, fallback: number): number => {
+    const raw = String(formData.get(key) ?? '').trim();
+    if (!raw) return fallback;
+    const n = parseInt(raw, 10);
+    return Number.isInteger(n) && n >= 0 ? n : fallback;
+  };
 
   const settingsPayload = {
-    store_name: String(formData.get('store_name') || '').trim(),
-    contact_email: String(formData.get('contact_email') || '').trim(),
-    phone: String(formData.get('phone') || '').trim(),
-    address_line1: String(formData.get('address_line1') || '').trim(),
-    address_line2: String(formData.get('address_line2') || '').trim(),
-    city: String(formData.get('city') || '').trim(),
-    province: String(formData.get('province') || '').trim(),
-    postal_code: String(formData.get('postal_code') || '').trim(),
+    store_name: String(formData.get('store_name') || current.store_name).trim() || current.store_name,
+    contact_email: String(formData.get('contact_email') || current.contact_email).trim() || current.contact_email,
+    phone: String(formData.get('phone') ?? current.phone).trim(),
+    address_line1: String(formData.get('address_line1') || current.address_line1).trim() || current.address_line1,
+    address_line2: String(formData.get('address_line2') ?? current.address_line2).trim(),
+    city: String(formData.get('city') || current.city).trim() || current.city,
+    province: String(formData.get('province') || current.province).trim() || current.province,
+    postal_code: String(formData.get('postal_code') || current.postal_code).trim() || current.postal_code,
     currency: 'ZAR',
     tax_enabled: formData.get('tax_enabled') === 'on',
-    tax_rate_percent: parseFloat(String(formData.get('tax_rate_percent') || '0')),
+    tax_rate_percent: (() => {
+      const raw = String(formData.get('tax_rate_percent') ?? '').trim();
+      if (!raw) return current.tax_rate_percent;
+      const n = parseFloat(raw);
+      return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : current.tax_rate_percent;
+    })(),
     free_shipping_enabled: formData.get('free_shipping_enabled') === 'on',
-    free_shipping_threshold_cents: Math.round(parseFloat(String(formData.get('free_shipping_threshold_rand') || '0')) * 100),
-    standard_base_cents: Math.round(parseFloat(String(formData.get('standard_base_rand') || '0')) * 100),
-    express_base_cents: Math.round(parseFloat(String(formData.get('express_base_rand') || '0')) * 100),
-    weight_threshold_g: parseInt(String(formData.get('weight_threshold_g') || '5000'), 10),
-    weight_surcharge_cents: Math.round(parseFloat(String(formData.get('weight_surcharge_rand') || '0')) * 100),
-    express_weight_surcharge_cents: Math.round(parseFloat(String(formData.get('express_weight_surcharge_rand') || '0')) * 100),
-    invoice_prefix: String(formData.get('invoice_prefix') || 'INV').trim(),
-    order_prefix: String(formData.get('order_prefix') || 'ORD').trim(),
-    invoice_due_days: parseInt(String(formData.get('invoice_due_days') || '14'), 10),
-    bank_name: String(formData.get('bank_name') || '').trim(),
-    bank_account_name: String(formData.get('bank_account_name') || '').trim(),
-    bank_account_number: String(formData.get('bank_account_number') || '').trim(),
-    bank_branch_code: String(formData.get('bank_branch_code') || '').trim(),
-    bank_reference_note: String(formData.get('bank_reference_note') || '').trim(),
+    free_shipping_threshold_cents: randToCents('free_shipping_threshold_rand', current.free_shipping_threshold_cents),
+    standard_base_cents: randToCents('standard_base_rand', current.standard_base_cents),
+    express_base_cents: randToCents('express_base_rand', current.express_base_cents),
+    weight_threshold_g: intOr('weight_threshold_g', current.weight_threshold_g),
+    weight_surcharge_cents: randToCents('weight_surcharge_rand', current.weight_surcharge_cents),
+    express_weight_surcharge_cents: randToCents('express_weight_surcharge_rand', current.express_weight_surcharge_cents),
+    invoice_prefix: String(formData.get('invoice_prefix') || current.invoice_prefix).trim() || current.invoice_prefix,
+    order_prefix: String(formData.get('order_prefix') || current.order_prefix).trim() || current.order_prefix,
+    invoice_due_days: (() => {
+      const n = intOr('invoice_due_days', current.invoice_due_days);
+      return n > 0 ? n : current.invoice_due_days;
+    })(),
+    low_stock_threshold: intOr('low_stock_threshold', current.low_stock_threshold ?? 5),
+    bank_name: String(formData.get('bank_name') ?? current.bank_name).trim(),
+    bank_account_name: String(formData.get('bank_account_name') ?? current.bank_account_name).trim(),
+    bank_account_number: String(formData.get('bank_account_number') ?? current.bank_account_number).trim(),
+    bank_branch_code: String(formData.get('bank_branch_code') ?? current.bank_branch_code).trim(),
+    bank_reference_note: String(formData.get('bank_reference_note') ?? current.bank_reference_note).trim(),
     whatsapp_enabled: formData.get('whatsapp_enabled') === 'on',
     whatsapp_number: String(formData.get('whatsapp_number') || '').replace(/[^\d]/g, '').slice(0, 15),
-    vat_number: String(formData.get('vat_number') || '').trim(),
+    vat_number: String(formData.get('vat_number') ?? current.vat_number).trim(),
   };
 
   try {
