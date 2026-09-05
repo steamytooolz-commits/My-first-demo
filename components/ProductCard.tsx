@@ -4,6 +4,7 @@ import { formatZar } from '@/lib/money';
 import QuickAddButton from '@/components/QuickAddButton';
 
 interface ProductCardProps {
+  storeName?: string;
   product: {
     id: string;
     name: string;
@@ -19,7 +20,7 @@ interface ProductCardProps {
   };
 }
 
-export default function ProductCard({ product }: ProductCardProps) {
+export default function ProductCard({ product, storeName }: ProductCardProps) {
   const isOutOfStock = product.total_stock <= 0;
   const isLowStock = !isOutOfStock && product.total_stock <= 5;
   const isSinglePrice = product.min_price_cents === product.max_price_cents;
@@ -39,7 +40,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400 font-serif">
-            Paper &amp; Quill
+            {storeName || 'Paper & Quill'}
           </div>
         )}
 

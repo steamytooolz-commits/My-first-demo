@@ -576,6 +576,13 @@ export async function adminSaveSettingsAction(prevState: any, formData: FormData
   const admin = await requireAdmin();
   const current = await getStoreSettings();
 
+  // Order/invoice prefixes end up inside URLs (/order/ORD-2026-…) — keep them
+  // to a tight alphabet so a compromised value can't break routing.
+  const cleanPrefix = (v: unknown, fallback: string): string => {
+    const s = String(v ?? '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 8);
+    return s || fallback;
+  };
+
   // Safe number parsing: blank/invalid inputs fall back to the STORED value,
   // never NaN (which failed validation silently) and never 0-wipes.
   const randToCents = (key: string, fallbackCents: number): number => {
@@ -615,8 +622,8 @@ export async function adminSaveSettingsAction(prevState: any, formData: FormData
     weight_threshold_g: intOr('weight_threshold_g', current.weight_threshold_g),
     weight_surcharge_cents: randToCents('weight_surcharge_rand', current.weight_surcharge_cents),
     express_weight_surcharge_cents: randToCents('express_weight_surcharge_rand', current.express_weight_surcharge_cents),
-    invoice_prefix: String(formData.get('invoice_prefix') || current.invoice_prefix).trim() || current.invoice_prefix,
-    order_prefix: String(formData.get('order_prefix') || current.order_prefix).trim() || current.order_prefix,
+    invoice_prefix: cleanPrefix(formData.get('invoice_prefix'), current.invoice_prefix),
+    order_prefix: cleanPrefix(formData.get('order_prefix'), current.order_prefix),
     invoice_due_days: (() => {
       const n = intOr('invoice_due_days', current.invoice_due_days);
       return n > 0 ? n : current.invoice_due_days;
@@ -695,6 +702,9 @@ export async function analyzeProductImportAction(prevState: any, formData: FormD
   if (csvText.length > 2500000) {
     return { success: false, error: 'File is too large (limit ~2.5MB / 2,000 rows). Split into smaller imports.' };
   }
+  if (csvText.includes('\0')) {
+    return { success: false, error: 'That file is not CSV text (binary?). Open the spreadsheet and use Save/Export as .csv, then retry.' };
+  }
   const parsed = parseCsv(csvText);
   if (parsed.headers.length === 0) {
     return { success: false, error: 'No header row found. The first row must contain column names.' };
@@ -730,6 +740,9 @@ export async function executeProductImportAction(prevState: any, formData: FormD
   }
   if (csvText.length > 2500000) {
     return { success: false, error: 'File is too large (limit ~2.5MB / 2,000 rows). Split into smaller imports.' };
+  }
+  if (csvText.includes('\0')) {
+    return { success: false, error: 'That file is not CSV text (binary?). Open the spreadsheet and use Save/Export as .csv, then retry.' };
   }
   const parsed = parseCsv(csvText);
   if (parsed.headers.length === 0) {

@@ -5,6 +5,13 @@ import { ShieldCheck, Mail, Phone, MapPin, Truck, FileText, RotateCcw, MessageCi
 
 export default async function Footer() {
   const settings = await getStoreSettings();
+  const brandInitials = String(settings.store_name || 'Paper & Quill')
+    .split(/[\s&]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w: string) => w[0])
+    .join('')
+    .toUpperCase() || 'PQ';
   const thresholdLabel = formatZar(settings.free_shipping_threshold_cents);
   const whatsappHref = settings.whatsapp_enabled && settings.whatsapp_number
     ? `https://wa.me/${settings.whatsapp_number}?text=${encodeURIComponent(`Hi ${settings.store_name}! I need help with an order.`)}`
@@ -23,7 +30,7 @@ export default async function Footer() {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-md bg-teal-800 text-white font-serif font-bold text-sm">
-                PQ
+                {brandInitials}
               </span>
               <span className="font-serif text-lg font-bold text-slate-900">{settings.store_name}</span>
             </div>

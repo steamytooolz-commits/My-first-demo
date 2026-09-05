@@ -3,6 +3,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import RegisterFormClient from '@/components/RegisterFormClient';
 import { sanitizeRedirectTo } from '@/lib/auth';
+import { getStoreSettings } from '@/lib/settings';
 
 interface RegisterPageProps {
   searchParams: Promise<{ redirectTo?: string }>;
@@ -11,6 +12,7 @@ interface RegisterPageProps {
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   const { redirectTo } = await searchParams;
   const safeTo = sanitizeRedirectTo(redirectTo, '/account');
+  const settings = await getStoreSettings().catch(() => ({ store_name: 'Paper & Quill' }) as any);
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -21,11 +23,11 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
           <div className="text-center mb-6">
             <h1 className="font-serif text-2xl font-bold text-slate-900">Create an Account</h1>
             <p className="mt-1 text-xs text-slate-500">
-              Join Paper &amp; Quill for faster checkout, order tracking, and South African tax invoices.
+              Join {settings.store_name} for faster checkout, order tracking, and South African tax invoices.
             </p>
           </div>
 
-          <RegisterFormClient redirectTo={safeTo} />
+          <RegisterFormClient redirectTo={safeTo} storeName={settings.store_name} />
 
           <div className="mt-6 pt-6 border-t border-slate-100 text-center text-xs text-slate-500">
             Already have an account?{' '}

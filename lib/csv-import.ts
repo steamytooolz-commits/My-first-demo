@@ -44,6 +44,17 @@ const HEADER_ALIASES: Record<string, string> = {
   featured: 'featured', feature: 'featured', highlight: 'featured', showcase: 'featured',
   image: 'image', 'image url': 'image', picture: 'image', photo: 'image',
   'image link': 'image', img: 'image',
+  // Afrikaans supplier sheets (common in SA wholesale)
+  naam: 'name', 'produk naam': 'name', titel: 'name',
+  beskrywing: 'description', kategorie: 'category', afdeling: 'category',
+  handelsmerk: 'brand', verskaffer: 'brand', vervaardiger: 'brand',
+  prys: 'price', 'prys zar': 'price', kleinhandel: 'price',
+  hoeveelheid: 'stock', voorraad: 'stock', 'voorraad op hande': 'stock',
+  gewig: 'weight', 'gewig g': 'weight',
+  strepieskode: 'barcode', artikelkode: 'sku', kode: 'sku',
+  opsie: 'variant', grootte: 'variant', kleur: 'variant',
+  aktief: 'active', geaktiveer: 'active', sigbaar: 'active',
+  uitgelig: 'featured',
 };
 
 export function normalizeHeader(header: string): string {
@@ -195,7 +206,7 @@ export function parsePriceToCents(raw: string | null | undefined): number | null
   if (raw == null) return null;
   let s = String(raw).trim();
   if (!s) return null;
-  s = s.replace(/R\s?/gi, '').replace(/ZAR/gi, '').replace(/\s/g, '');
+  s = s.replace(/R\s?/gi, '').replace(/ZAR/gi, '').replace(/[$€£]/g, '').replace(/\s/g, '');
   if (!s || s === '-') return null;
   const hasComma = s.includes(',');
   const hasDot = s.includes('.');
@@ -291,7 +302,7 @@ export async function executeProductImport(
         byField[f] = val;
       }
     });
-    const key = byField.slug || slugify(byField.name || `row-${rowIdx + 1}`);
+    const key = (byField.slug || '').toLowerCase() || slugify(byField.name || `row-${rowIdx + 1}`);
     if (!groups.has(key)) {
       groups.set(key, { indexes: [], fields: [] });
     }

@@ -10,7 +10,14 @@ export default async function Navbar() {
   // signed-out / empty-cart / default-settings instead of throwing.
   const user = await getSessionUser().catch(() => null);
   const cart = await getCartSummary().catch(() => ({ itemCount: 0 }) as any);
-  const settings = await getStoreSettings().catch(() => ({ free_shipping_threshold_cents: 95000 }) as any);
+  const settings = await getStoreSettings().catch(() => ({ free_shipping_threshold_cents: 95000, store_name: 'Paper & Quill' }) as any);
+  const brandInitials = String(settings.store_name || 'Paper & Quill')
+    .split(/[\s&]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w: string) => w[0])
+    .join('')
+    .toUpperCase() || 'PQ';
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md">
@@ -24,9 +31,9 @@ export default async function Navbar() {
         <div className="flex items-center gap-8">
           <Link href="/" id="brand-logo" className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:opacity-90">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-800 text-white shadow-sm font-serif">
-              PQ
+              {brandInitials}
             </span>
-            <span className="font-serif text-lg tracking-normal">Paper &amp; Quill</span>
+            <span className="font-serif text-lg tracking-normal">{settings.store_name}</span>
           </Link>
 
           {/* Main nav links */}

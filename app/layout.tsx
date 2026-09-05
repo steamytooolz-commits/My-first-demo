@@ -1,23 +1,24 @@
 import type {Metadata} from 'next';
 import './globals.css'; // Global styles
 import WhatsAppButton from '@/components/WhatsAppButton';
+import { getStoreSettings } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Paper & Quill Stationery',
-  description: 'A complete, production-ready stationery online store featuring storefront browsing, cart, checkout simulation, customer portal, invoicing, POPIA compliance, and admin dashboard.',
-  openGraph: {
-    title: 'Paper & Quill Stationery',
-    description: 'A complete, production-ready stationery online store featuring storefront browsing, cart, checkout simulation, customer portal, invoicing, POPIA compliance, and admin dashboard.',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Paper & Quill Stationery',
-    description: 'A complete, production-ready stationery online store featuring storefront browsing, cart, checkout simulation, customer portal, invoicing, POPIA compliance, and admin dashboard.',
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  let name = 'Paper & Quill Stationery';
+  try {
+    const s = await getStoreSettings();
+    if (s.store_name) name = s.store_name;
+  } catch {}
+  const description = `${name} — fine pens, journals and desk essentials. Live demo storefront with cart, checkout, VAT invoices and admin.`;
+  return {
+    title: name,
+    description,
+    openGraph: { title: name, description, type: 'website' },
+    twitter: { card: 'summary_large_image', title: name, description },
+  };
+}
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (

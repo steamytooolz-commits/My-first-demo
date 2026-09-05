@@ -4,6 +4,7 @@ import Footer from '@/components/Footer';
 import ProductCard from '@/components/ProductCard';
 import AutoSubmitSelect from '@/components/AutoSubmitSelect';
 import { db } from '@/lib/db';
+import { getStoreSettings } from '@/lib/settings';
 import { Search, Filter, X } from 'lucide-react';
 
 interface CatalogPageProps {
@@ -25,6 +26,8 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const minPriceRand = parseFloat(resolvedParams.minPrice || '0') || 0;
   const maxPriceRand = parseFloat(resolvedParams.maxPrice || '0') || 0;
   const sort = resolvedParams.sort || 'featured';
+
+  const { store_name: storeName } = await getStoreSettings().catch(() => ({ store_name: 'Paper & Quill' }) as any);
 
   // Categories list for filter sidebar
   const categories = await db.prepare(`
@@ -287,7 +290,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
             ) : (
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {products.map(product => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard key={product.id} product={product} storeName={storeName} />
                 ))}
               </div>
             )}

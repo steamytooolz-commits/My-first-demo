@@ -10,10 +10,17 @@ import { ArrowRight, Truck, ShieldCheck, Feather, FileText } from 'lucide-react'
 
 import type { Metadata } from 'next';
 
-export const metadata: Metadata = {
-  title: 'Paper & Quill Stationery — Fine Pens, Journals & Desk Essentials',
-  description: 'South African artisan stationery: fountain pens, Smyth-sewn journals, archival paper. Live demo storefront with cart, checkout, VAT invoices and admin.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  let name = 'Paper & Quill Stationery';
+  try {
+    const s = await getStoreSettings();
+    if (s.store_name) name = s.store_name;
+  } catch {}
+  return {
+    title: `${name} — Fine Pens, Journals & Desk Essentials`,
+    description: `${name}: South African artisan stationery. Live demo storefront with cart, checkout, VAT invoices and admin.`,
+  };
+}
 
 export default async function HomePage() {
   const settings = await getStoreSettings();
@@ -248,7 +255,7 @@ export default async function HomePage() {
                 </p>
               )}
               {rawFeatured.map((product: any) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} storeName={settings.store_name} />
               ))}
             </div>
           </div>

@@ -11,7 +11,8 @@ function safeRedirect(raw: string | null | undefined): string {
   return v.slice(0, 200) || '/account';
 }
 
-export default function RegisterFormClient({ redirectTo }: { redirectTo: string }) {
+export default function RegisterFormClient({ redirectTo, storeName }: { redirectTo: string; storeName?: string }) {
+  const brand = storeName || 'Paper & Quill';
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -123,7 +124,7 @@ export default function RegisterFormClient({ redirectTo }: { redirectTo: string 
           />
           <label htmlFor="poia_consent" className="text-[11px] text-slate-700 leading-relaxed cursor-pointer">
             <strong className="text-teal-950 block">Processing Acknowledgement (Required)</strong>
-            I understand Paper &amp; Quill must process my name, contact and delivery details to fulfil orders and meet tax law (contract + legal obligation, POPIA s11(1)(b)–(c)). Marketing emails remain strictly opt-in below.
+            I understand {brand} must process my name, contact and delivery details to fulfil orders and meet tax law (contract + legal obligation, POPIA s11(1)(b)–(c)). Marketing emails remain strictly opt-in below.
           </label>
         </div>
         {fieldErrors.poia_consent && <p className="text-[11px] text-rose-600">{fieldErrors.poia_consent}</p>}

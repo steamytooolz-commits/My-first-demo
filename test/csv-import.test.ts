@@ -8,6 +8,7 @@ import {
   parseBool,
   slugify,
   executeProductImport,
+  MAX_IMPORT_ROWS,
 } from '../lib/csv-import';
 import { db } from '../lib/db';
 
@@ -131,5 +132,83 @@ describe('csv import execution', () => {
     const res = await executeProductImport(headers, rows, { 0: 'name', 1: 'stock' }, null);
     expect(res.success).toBe(false);
     expect(res.error).toContain('Price');
+  });
+});
+
+describe('supplier format matrix (bulk-import hardening)', () => {
+  it('handles tab, pipe and semicolon supplier layouts', () => {
+    const tab = parseCsv('name\tprice\tstock\nPen\t10.00\t5');
+    expect(tab.delimiter).toBe('\t');
+    expect(tab.rows[0]).toEqual(['Pen', '10.00', '5']);
+
+    const pipe = parseCsv('name|price|stock\nPen|10.00|5');
+    expect(pipe.delimiter).toBe('|');
+    expect(pipe.rows[0]).toEqual(['Pen', '10.00', '5']);
+
+    const semi = parseCsv('name;price;stock\nPen;10,00;5');
+    expect(semi.delimiter).toBe(';');
+    expect(semi.rows[0]).toEqual(['Pen', '10,00', '5']);
+  });
+
+  it('handles CRLF, missing trailing newline and multiline quoted fields', () => {
+    const crlf = parseCsv('name,price\r\nA,1.00\r\nB,2.00\r\n');
+    expect(crlf.rows).toHaveLength(2);
+
+    const noeol = parseCsv('name,price\nA,1.00');
+    expect(noeol.rows).toHaveLength(1);
+    expect(noeol.rows[0]).toEqual(['A', '1.00']);
+
+    const multi = parseCsv('name,description,price\n"Widget","line1\nline2",10.00\nPen,Simple,5.00');
+    expect(multi.rows).toHaveLength(2);
+    expect(multi.rows[0][1]).toBe('line1\nline2');
+  });
+
+  it('maps Afrikaans wholesale headers', () => {
+    const { mapping } = suggestMapping(['Naam', 'Beskrywing', 'Kategorie', 'Prys', 'Voorraad', 'Gewig']);
+    expect(mapping[0]).toBe('name');
+    expect(mapping[1]).toBe('description');
+    expect(mapping[2]).toBe('category');
+    expect(mapping[3]).toBe('price');
+    expect(mapping[4]).toBe('stock');
+    expect(mapping[5]).toBe('weight');
+  });
+
+  it('maps English supplier variants and flags duplicates', () => {
+    const { mapping, warnings } = suggestMapping(['Title', 'Retail Price', 'Was', 'Mystery']);
+    expect(mapping[0]).toBe('name');
+    expect(mapping[1]).toBe('price');
+    expect(mapping[2]).toBe('compare_at');
+    expect(mapping[3]).toBe('__ignore');
+    expect(warnings.length).toBeGreaterThan(0);
+
+    const dup = suggestMapping(['Price', 'Retail Price']);
+    expect(dup.mapping[0]).toBe('price');
+    expect(dup.mapping[1]).toBe('__ignore');
+    expect(dup.warnings.join(' ')).toContain('Price');
+  });
+
+  it('parses worldly SA price formats to cents', () => {
+    expect(parsePriceToCents('R1 299,00')).toBe(129900);
+    expect(parsePriceToCents('1,299.00')).toBe(129900);
+    expect(parsePriceToCents('R 1,299.00')).toBe(129900);
+    expect(parsePriceToCents('$12.50')).toBe(1250);
+    expect(parsePriceToCents('€9,99')).toBe(999);
+    expect(parsePriceToCents('ZAR 245')).toBe(24500);
+    expect(parsePriceToCents('R 0.00')).toBe(0);
+    expect(parsePriceToCents('   ')).toBeNull();
+    expect(parsePriceToCents('(245.00)')).toBeNull();
+  });
+
+  it('truncates over-limit files at MAX_IMPORT_ROWS', () => {
+    const lines = ['name,price'];
+    for (let i = 0; i < MAX_IMPORT_ROWS + 5; i++) lines.push(`Item ${i},10.00`);
+    const parsed = parseCsv(lines.join('\n'));
+    expect(parsed.truncated).toBe(true);
+    expect(parsed.rows).toHaveLength(MAX_IMPORT_ROWS);
+  });
+
+  it('rejects empty input with no headers', () => {
+    expect(parseCsv('').headers).toEqual([]);
+    expect(parseCsv('   \n  \n').headers).toEqual([]);
   });
 });

@@ -12,14 +12,14 @@ export default async function TermsPage() {
       <main className="mx-auto max-w-4xl flex-1 px-4 py-12 sm:px-6 lg:px-8 space-y-8">
         <div>
           <h1 className="font-serif text-3xl font-bold text-slate-900">Terms of Service</h1>
-          <p className="text-xs text-slate-500 mt-1">Paper &amp; Quill (Pty) Ltd • Governed by South African Law</p>
+          <p className="text-xs text-slate-500 mt-1">{settings.store_name} • Governed by South African Law</p>
         </div>
 
         <div className="prose prose-slate max-w-none text-xs leading-relaxed space-y-6 text-slate-700 bg-white p-8 rounded-2xl border border-slate-200">
           <section className="space-y-2">
             <h2 className="font-serif text-base font-bold text-slate-900">1. Introduction &amp; Applicability</h2>
             <p>
-              These Terms and Conditions govern the purchase of stationery goods from the Paper &amp; Quill online store. By placing an order, you agree to be bound by these provisions, in accordance with the <strong>Electronic Communications and Transactions Act, 25 of 2002 (ECTA)</strong> and the <strong>Consumer Protection Act, 68 of 2008 (CPA)</strong>.
+              These Terms and Conditions govern the purchase of stationery goods from the {settings.store_name} online store. By placing an order, you agree to be bound by these provisions, in accordance with the <strong>Electronic Communications and Transactions Act, 25 of 2002 (ECTA)</strong> and the <strong>Consumer Protection Act, 68 of 2008 (CPA)</strong>.
             </p>
           </section>
 

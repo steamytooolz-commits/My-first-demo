@@ -19,14 +19,14 @@ export default async function PrivacyPage() {
           <section className="space-y-2">
             <h2 className="font-serif text-base font-bold text-slate-900">1. Commitment to Privacy</h2>
             <p>
-              Paper &amp; Quill (Pty) Ltd (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) is committed to protecting your personal information in compliance with the South African <strong>Protection of Personal Information Act, 4 of 2013 (&ldquo;POPIA&rdquo;)</strong> and the <strong>Promotion of Access to Information Act, 2 of 2000 (&ldquo;PAIA&rdquo;)</strong>.
+              {settings.store_name} (&ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;) is committed to protecting your personal information in compliance with the South African <strong>Protection of Personal Information Act, 4 of 2013 (&ldquo;POPIA&rdquo;)</strong> and the <strong>Promotion of Access to Information Act, 2 of 2000 (&ldquo;PAIA&rdquo;)</strong>.
             </p>
           </section>
 
           <section className="space-y-2">
             <h2 className="font-serif text-base font-bold text-slate-900">2. Responsible Party &amp; Information Officer</h2>
             <p>
-              The designated Information Officer for Paper &amp; Quill can be reached at:
+              The designated Information Officer for {settings.store_name} can be reached at:
             </p>
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 font-mono text-[11px]">
               <p>Information Officer: Compliance Desk (acting)</p>
