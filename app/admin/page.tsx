@@ -143,7 +143,7 @@ export default async function AdminDashboardPage() {
               <p className="text-slate-600">Drop a supplier price list, confirm columns, import up to 2,000 rows. Re-imports update, never duplicate.</p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <Link href="/admin/products/import" className="rounded-lg bg-teal-800 px-3 py-1.5 font-semibold text-white hover:bg-teal-900">Import CSV</Link>
-                <a href="/admin/products/import" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">Get template</a>
+                <Link href="/admin/products/new" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">Single create</Link>
               </div>
             </div>
             <div className="rounded-xl border border-teal-200 bg-white p-4 space-y-2">
