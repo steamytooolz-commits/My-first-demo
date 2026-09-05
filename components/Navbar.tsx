@@ -26,14 +26,14 @@ export default async function Navbar() {
         <span>Free standard delivery across South Africa on orders over {formatZar(settings.free_shipping_threshold_cents)} • Safe simulated payments</span>
       </div>
 
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-6 lg:px-8">
         {/* Brand */}
         <div className="flex items-center gap-8">
-          <Link href="/" id="brand-logo" className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:opacity-90">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-800 text-white shadow-sm font-serif">
+          <Link href="/" id="brand-logo" className="flex min-w-0 items-center gap-2 text-xl font-bold tracking-tight text-slate-900 hover:opacity-90">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-800 text-white shadow-sm font-serif">
               {brandInitials}
             </span>
-            <span className="font-serif text-lg tracking-normal">{settings.store_name}</span>
+            <span className="truncate font-serif text-lg tracking-normal">{settings.store_name}</span>
           </Link>
 
           {/* Main nav links */}
@@ -54,7 +54,7 @@ export default async function Navbar() {
         </div>
 
         {/* Search, Account & Cart */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {/* Quick search input form */}
           <form action="/catalog" method="GET" className="relative hidden sm:block w-48 lg:w-64">
             <input

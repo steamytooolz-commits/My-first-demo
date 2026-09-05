@@ -32,7 +32,8 @@ export default async function AdminInvoicesPage() {
 
       {/* Invoices Table */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-xs border-collapse">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
             <tr>
               <th className="py-3 px-4">Invoice #</th>
@@ -79,6 +80,7 @@ export default async function AdminInvoicesPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

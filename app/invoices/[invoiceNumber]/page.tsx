@@ -107,7 +107,7 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
       </div>
 
       {/* A4 Tax Invoice Card */}
-      <div className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-8 sm:p-12 shadow-sm print:border-none print:shadow-none print:p-0">
+      <div className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 sm:p-12 shadow-sm print:border-none print:shadow-none print:p-0">
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 pb-8 border-b-2 border-slate-900">
           <div>
@@ -176,8 +176,8 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
         </div>
 
         {/* Items Table */}
-        <div className="py-6">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="py-6 overflow-x-auto">
+          <table className="w-full min-w-[600px] text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-300 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
                 <th className="py-2.5">Item Description &amp; SKU</th>

@@ -63,7 +63,7 @@ export default async function AdminProductDetailPage({ params }: ProductEditPage
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full min-w-[720px] text-left text-xs border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-600">
               <tr>
                 <th className="py-2.5 px-3">SKU</th>

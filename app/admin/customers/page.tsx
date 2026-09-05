@@ -176,7 +176,8 @@ export default async function AdminCustomersPage() {
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden space-y-4 p-6">
         <h2 className="font-serif text-base font-bold text-slate-900">Customer Accounts Registry</h2>
 
-        <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto -mx-1 px-1">
+        <table className="w-full min-w-[820px] text-left text-xs border-collapse">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
             <tr>
               <th className="py-3 px-3">Name &amp; Email</th>
@@ -227,6 +228,7 @@ export default async function AdminCustomersPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

@@ -84,7 +84,8 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
 
       {/* Table */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <table className="w-full text-left text-xs border-collapse">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-xs border-collapse">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px] tracking-wider">
             <tr>
               <th className="py-3 px-4">Product Name</th>
@@ -146,6 +147,7 @@ export default async function AdminProductsPage({ searchParams }: AdminProductsP
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

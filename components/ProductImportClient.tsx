@@ -303,7 +303,7 @@ export default function ProductImportClient() {
           )}
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full min-w-[640px] text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
                   <th className="py-2 pr-3">CSV column</th>
