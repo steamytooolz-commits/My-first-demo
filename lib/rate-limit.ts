@@ -58,11 +58,13 @@ export async function checkRateLimit(
 
 /**
  * Check login attempts from SQLite login_attempts table as specified in Section 12:
- * "If 5 failed attempts for the same email and IP within 15 minutes, block login for 15 minutes"
+ * "If 5 failed attempts for the same email within 15 minutes, block login for 15 minutes"
+ * Deliberately keyed on email alone (not email+IP): X-Forwarded-For is
+ * attacker-controlled, so per-IP buckets are trivially bypassed with random headers.
  */
 export async function checkLoginThrottle(
   email: string,
-  ip: string
+  _ip: string
 ): Promise<{ allowed: boolean; remainingAttempts: number }> {
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
@@ -70,10 +72,9 @@ export async function checkLoginThrottle(
     SELECT COUNT(*) as failed_count
     FROM login_attempts
     WHERE email = ? COLLATE NOCASE
-      AND ip = ?
       AND success = 0
       AND created_at >= ?
-  `).get(email.trim().toLowerCase(), ip, fifteenMinutesAgo) as { failed_count: number };
+  `).get(email.trim().toLowerCase(), fifteenMinutesAgo) as { failed_count: number };
 
   const failedCount = row?.failed_count ?? 0;
   const maxAttempts = 5;
@@ -90,8 +91,8 @@ export async function recordLoginAttempt(email: string, ip: string, success: boo
 
   if (success) {
     await db.prepare(`
-      DELETE FROM login_attempts WHERE email = ? COLLATE NOCASE AND ip = ? AND success = 0
-    `).run(normalizedEmail, ip);
+      DELETE FROM login_attempts WHERE email = ? COLLATE NOCASE AND success = 0
+    `).run(normalizedEmail);
   }
 
   await db.prepare(`

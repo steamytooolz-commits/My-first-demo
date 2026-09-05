@@ -100,7 +100,25 @@ export function hashSessionToken(token: string): string {
 }
 
 function getSessionSecret(): string {
-  return process.env.SESSION_SECRET || 'dev-fallback-secret-change-me-in-prod-32chars!';
+  const s = process.env.SESSION_SECRET || '';
+  if (s.length >= 32) return s;
+  // Fail closed in production: forged JWTs must never verify with a fallback secret.
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    throw new Error('SESSION_SECRET is missing or too short (minimum 32 characters). Refusing to sign session tokens.');
+  }
+  console.warn('[auth] SESSION_SECRET unset — using dev-only fallback. Never deploy like this.');
+  return 'dev-only-fallback-secret-do-not-use-in-prod-32c';
+}
+
+/**
+ * Allow only internal redirect targets (open-redirect guard for ?redirectTo=).
+ * Accepts "/account" style paths; rejects absolute URLs, protocol-relative and backslashes.
+ */
+export function sanitizeRedirectTo(raw: string | null | undefined, fallback = '/account'): string {
+  const v = String(raw || '').trim();
+  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/\\')) return fallback;
+  if (/[\\]/.test(v) || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v)) return fallback;
+  return v.slice(0, 200) || fallback;
 }
 
 function base64UrlEncode(input: Buffer | string): string {
@@ -168,7 +186,7 @@ export async function createSession(userId: string, ip?: string, userAgent?: str
     cookieStore.set(SESSION_COOKIE_NAME, rawToken, {
       httpOnly: true,
       secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
+      sameSite: 'lax',
       path: '/',
       maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
     });
@@ -198,7 +216,7 @@ export async function destroySession(): Promise<void> {
     cookieStore.set(SESSION_COOKIE_NAME, '', {
       httpOnly: true,
       secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
+      sameSite: 'lax',
       path: '/',
       maxAge: 0,
     });

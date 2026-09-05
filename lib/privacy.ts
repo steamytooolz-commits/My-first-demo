@@ -16,11 +16,21 @@ export interface CustomerDataExport {
  * Generate full personal data export as JSON
  */
 export async function generateCustomerExport(userId: string): Promise<CustomerDataExport> {
-  const user = await db.prepare(`
-    SELECT id, email, full_name, phone, role, status, marketing_consent,
-           poia_processing_consent_at, created_at, updated_at
-    FROM users WHERE id = ?
-  `).get(userId) as any;
+  let user: any;
+  try {
+    user = await db.prepare(`
+      SELECT id, email, full_name, phone, role, status, marketing_consent,
+             poia_processing_consent_at, account_type, trade_status, business_name,
+             trade_vat_number, cipc_number, created_at, updated_at
+      FROM users WHERE id = ?
+    `).get(userId) as any;
+  } catch {
+    user = await db.prepare(`
+      SELECT id, email, full_name, phone, role, status, marketing_consent,
+             poia_processing_consent_at, created_at, updated_at
+      FROM users WHERE id = ?
+    `).get(userId) as any;
+  }
 
   const addresses = await db.prepare(`SELECT * FROM addresses WHERE user_id = ?`).all(userId);
   const orders = await db.prepare(`SELECT * FROM orders WHERE user_id = ?`).all(userId);
@@ -51,7 +61,7 @@ export async function generateCustomerExport(userId: string): Promise<CustomerDa
 /**
  * Request account erasure under POPIA
  */
-export async function requestAccountErasure(userId: string, reason?: string): Promise<{ success: boolean; scheduledFor: string; error?: string }> {
+export async function requestAccountErasure(userId: string, reason?: string, immediate = false): Promise<{ success: boolean; scheduledFor: string; error?: string }> {
   const existing = await db.prepare(`
     SELECT id, scheduled_for FROM data_subject_requests
     WHERE user_id = ? AND type = 'erasure' AND status = 'pending'
@@ -62,7 +72,9 @@ export async function requestAccountErasure(userId: string, reason?: string): Pr
   }
 
   const id = crypto.randomUUID();
-  const scheduledFor = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const scheduledFor = immediate
+    ? new Date().toISOString()
+    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   await db.prepare(`
     INSERT INTO data_subject_requests (id, user_id, type, status, reason, scheduled_for, created_at)

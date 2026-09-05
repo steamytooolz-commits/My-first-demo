@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { db } from './db';
-import { productSchema, variantSchema } from './validation';
+import { productSchema, variantSchema, isSafeImageUrl } from './validation';
 import { logAudit } from './audit';
 
 // Batch CSV catalogue import — tolerant of different supplier spreadsheet layouts.
@@ -330,6 +330,12 @@ export async function executeProductImport(
         }
       }
       const firstRow = group.indexes[0];
+
+      // Drop unsafe image URLs (javascript:/data:/protocol-relative) — never store them
+      if (merged.image && !isSafeImageUrl(merged.image)) {
+        pushError(firstRow, `Unsafe image URL "${merged.image.slice(0, 80)}" removed — use a site path or https:// link.`);
+        delete merged.image;
+      }
 
       if (!merged.name) {
         pushError(firstRow, 'Missing product name — row skipped.');

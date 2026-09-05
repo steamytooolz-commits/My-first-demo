@@ -10,6 +10,7 @@ export async function requestErasureAction(prevState: any, formData: FormData): 
   const user = await requireUser();
   const reason = String(formData.get('reason') || '').trim();
   const password = String(formData.get('password') || '');
+  const immediate = formData.get('immediate') === 'on';
 
   // JP Freelance staging lock: secondary password confirmation before erasure (human-quality gate)
   if (!password) {
@@ -20,7 +21,7 @@ export async function requestErasureAction(prevState: any, formData: FormData): 
     return { success: false, error: 'Password confirmation failed. Erasure not scheduled.' };
   }
 
-  const result = await requestAccountErasure(user.id, reason);
+  const result = await requestAccountErasure(user.id, reason, immediate);
   revalidatePath('/account/privacy');
   return result;
 }

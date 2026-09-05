@@ -4,6 +4,13 @@ import { useState } from 'react';
 import { registerAction } from '@/app/actions/auth';
 import { AlertCircle, ShieldCheck } from 'lucide-react';
 
+function safeRedirect(raw: string | null | undefined): string {
+  const v = String(raw || '').trim();
+  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/\\')) return '/account';
+  if (/[\\]/.test(v)) return '/account';
+  return v.slice(0, 200) || '/account';
+}
+
 export default function RegisterFormClient({ redirectTo }: { redirectTo: string }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +42,7 @@ export default function RegisterFormClient({ redirectTo }: { redirectTo: string 
         return;
       }
 
-      window.location.href = result.redirectTo || redirectTo || '/account';
+      window.location.href = safeRedirect(result.redirectTo || redirectTo);
     } catch (err: any) {
       setIsSubmitting(false);
       setError(err?.message || 'Failed to create account.');
@@ -115,8 +122,8 @@ export default function RegisterFormClient({ redirectTo }: { redirectTo: string 
             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-800 focus:ring-teal-700"
           />
           <label htmlFor="poia_consent" className="text-[11px] text-slate-700 leading-relaxed cursor-pointer">
-            <strong className="text-teal-950 block">POPIA Processing Consent (Mandatory)</strong>
-            I consent to Paper &amp; Quill processing my personal information strictly for order fulfilment, delivery, and tax compliance under the Protection of Personal Information Act (POPIA).
+            <strong className="text-teal-950 block">Processing Acknowledgement (Required)</strong>
+            I understand Paper &amp; Quill must process my name, contact and delivery details to fulfil orders and meet tax law (contract + legal obligation, POPIA s11(1)(b)–(c)). Marketing emails remain strictly opt-in below.
           </label>
         </div>
         {fieldErrors.poia_consent && <p className="text-[11px] text-rose-600">{fieldErrors.poia_consent}</p>}

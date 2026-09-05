@@ -60,6 +60,11 @@ export default function ContactForm() {
       >
         Send Message
       </button>
+
+      <p className="text-[11px] text-slate-500 leading-relaxed">
+        We use your name, email and message only to respond to your enquiry and delete it once resolved.
+        See our <a href="/privacy" className="font-semibold text-teal-800 hover:underline">Privacy Notice</a>.
+      </p>
     </form>
   );
 }

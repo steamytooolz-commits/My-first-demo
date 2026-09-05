@@ -7,7 +7,7 @@ import { requireAdmin } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { updateStoreSettings } from '@/lib/settings';
 import { processErasure } from '@/lib/privacy';
-import { productSchema, variantSchema, categorySchema, couponSchema } from '@/lib/validation';
+import { productSchema, variantSchema, categorySchema, couponSchema, isSafeImageUrl } from '@/lib/validation';
 import { parseCsv, suggestMapping, executeProductImport } from '@/lib/csv-import';
 
 export interface AdminActionResponse {
@@ -37,6 +37,10 @@ export async function adminSaveProductAction(prevState: any, formData: FormData)
   const parsed = productSchema.safeParse(raw);
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0]?.message || 'Invalid product data' };
+  }
+
+  if (imageUrl && !isSafeImageUrl(imageUrl)) {
+    return { success: false, error: 'Image URL must be a site path (e.g. /seed/…) or an https:// link.' };
   }
 
   const p = parsed.data;
@@ -148,6 +152,9 @@ export async function adminCreateProductWithVariantAction(
   const parsedProduct = productSchema.safeParse(rawProduct);
   if (!parsedProduct.success) {
     return { success: false, error: parsedProduct.error.issues[0]?.message || 'Invalid product data' };
+  }
+  if (imageUrl && !isSafeImageUrl(imageUrl)) {
+    return { success: false, error: 'Image URL must be a site path (e.g. /seed/…) or an https:// link.' };
   }
   const p = parsedProduct.data;
 
@@ -660,6 +667,9 @@ export async function analyzeProductImportAction(prevState: any, formData: FormD
   if (!csvText.trim()) {
     return { success: false, error: 'Upload a CSV file first.' };
   }
+  if (csvText.length > 2500000) {
+    return { success: false, error: 'File is too large (limit ~2.5MB / 2,000 rows). Split into smaller imports.' };
+  }
   const parsed = parseCsv(csvText);
   if (parsed.headers.length === 0) {
     return { success: false, error: 'No header row found. The first row must contain column names.' };
@@ -692,6 +702,9 @@ export async function executeProductImportAction(prevState: any, formData: FormD
   }
   if (!csvText.trim()) {
     return { success: false, error: 'Upload a CSV file first.' };
+  }
+  if (csvText.length > 2500000) {
+    return { success: false, error: 'File is too large (limit ~2.5MB / 2,000 rows). Split into smaller imports.' };
   }
   const parsed = parseCsv(csvText);
   if (parsed.headers.length === 0) {

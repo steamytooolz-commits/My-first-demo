@@ -14,11 +14,24 @@ export async function logAudit(
     let sanitizedData: Record<string, any> | null = null;
     if (data) {
       sanitizedData = { ...data };
-      delete sanitizedData.password;
-      delete sanitizedData.password_hash;
-      delete sanitizedData.token;
-      delete sanitizedData.token_hash;
-      delete sanitizedData.cardNumber;
+      for (const key of [
+        'password',
+        'password_hash',
+        'current_password',
+        'new_password',
+        'confirm_password',
+        'token',
+        'token_hash',
+        'cardNumber',
+        'card_number',
+        'cvc',
+        'cvv',
+        'bank_account_number',
+        'bank_branch_code',
+        'bank_account_name',
+      ]) {
+        delete sanitizedData[key];
+      }
     }
 
     await db.prepare(`

@@ -31,37 +31,51 @@ export async function saveAddressAction(prevState: any, formData: FormData): Pro
   const data = parsed.data;
 
   let savedId = id || '';
-  await db.transaction(async () => {
-    if (data.is_default) {
-      await db.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').run(user.id);
-    }
+  try {
+    await db.transaction(async () => {
+      if (data.is_default) {
+        await db.prepare('UPDATE addresses SET is_default = 0 WHERE user_id = ?').run(user.id);
+      }
 
-    if (id) {
-      await db.prepare(`
-        UPDATE addresses
-        SET label = ?, full_name = ?, phone = ?, line1 = ?, line2 = ?,
-            city = ?, province = ?, postal_code = ?, country = ?, is_default = ?
-        WHERE id = ? AND user_id = ?
-      `).run(
-        data.label, data.full_name, data.phone, data.line1, data.line2 || '',
-        data.city, data.province, data.postal_code, data.country, data.is_default ? 1 : 0,
-        id, user.id
-      );
-      savedId = id;
-    } else {
-      const addressId = crypto.randomUUID();
-      await db.prepare(`
-        INSERT INTO addresses (
-          id, user_id, label, full_name, phone, line1, line2,
-          city, province, postal_code, country, is_default
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        addressId, user.id, data.label, data.full_name, data.phone, data.line1, data.line2 || '',
-        data.city, data.province, data.postal_code, data.country, data.is_default ? 1 : 0
-      );
-      savedId = addressId;
-    }
-  })();
+      if (id) {
+        const res = await db.prepare(`
+          UPDATE addresses
+          SET label = ?, full_name = ?, phone = ?, line1 = ?, line2 = ?,
+              city = ?, province = ?, postal_code = ?, country = ?, is_default = ?
+          WHERE id = ? AND user_id = ?
+        `).run(
+          data.label, data.full_name, data.phone, data.line1, data.line2 || '',
+          data.city, data.province, data.postal_code, data.country, data.is_default ? 1 : 0,
+          id, user.id
+        ) as any;
+        if (Number(res?.changes ?? 0) < 1) {
+          throw new Error('ADDRESS_NOT_FOUND');
+        }
+        savedId = id;
+      } else {
+        const countRow = await db.prepare(`SELECT COUNT(*) as c FROM addresses WHERE user_id = ?`).get(user.id) as any;
+        if (Number(countRow?.c ?? 0) >= 20) {
+          throw new Error('ADDRESS_LIMIT');
+        }
+        const addressId = crypto.randomUUID();
+        await db.prepare(`
+          INSERT INTO addresses (
+            id, user_id, label, full_name, phone, line1, line2,
+            city, province, postal_code, country, is_default
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          addressId, user.id, data.label, data.full_name, data.phone, data.line1, data.line2 || '',
+          data.city, data.province, data.postal_code, data.country, data.is_default ? 1 : 0
+        );
+        savedId = addressId;
+      }
+    })();
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    if (msg.includes('ADDRESS_NOT_FOUND')) return { success: false, error: 'Address not found.' };
+    if (msg.includes('ADDRESS_LIMIT')) return { success: false, error: 'Address book is full (20 saved addresses max). Delete one first.' };
+    throw e;
+  }
 
   revalidatePath('/account/addresses');
   revalidatePath('/checkout');

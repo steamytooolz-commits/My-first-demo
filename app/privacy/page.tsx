@@ -29,11 +29,14 @@ export default async function PrivacyPage() {
               The designated Information Officer for Paper &amp; Quill can be reached at:
             </p>
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 font-mono text-[11px]">
-              <p>Information Officer: Compliance Desk</p>
+              <p>Information Officer: Compliance Desk (acting)</p>
               <p>Email: {settings.contact_email}</p>
               {settings.phone ? <p>Phone: {settings.phone}</p> : null}
               <p>Address: {settings.address_line1}, {settings.city}, South Africa</p>
             </div>
+            <p>
+              If you believe your rights have been infringed, you may lodge a complaint with the <strong>Information Regulator of South Africa</strong> (POPIA complaints via <span className="font-mono">inforegulator.org.za</span>).
+            </p>
           </section>
 
           <section className="space-y-2">

@@ -64,6 +64,9 @@ export async function placeOrderAction(prevState: any, formData: FormData): Prom
 export async function retryPaymentAction(orderId: string, outcome: 'success' | 'declined' | 'pending'): Promise<{ success: boolean; error?: string }> {
   const user = await getSessionUser();
   if (!user) return { success: false, error: 'Unauthorized' };
+  if (!orderId || outcome !== 'success' && outcome !== 'declined' && outcome !== 'pending') {
+    return { success: false, error: 'Invalid payment retry request.' };
+  }
 
   const result = await retryOrderPayment(orderId, user.id, outcome);
   revalidatePath('/order', 'page');

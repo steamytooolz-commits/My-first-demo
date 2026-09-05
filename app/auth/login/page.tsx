@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import LoginFormClient from '@/components/LoginFormClient';
+import { sanitizeRedirectTo } from '@/lib/auth';
 
 interface LoginPageProps {
   searchParams: Promise<{ redirectTo?: string }>;
@@ -9,6 +10,7 @@ interface LoginPageProps {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const { redirectTo } = await searchParams;
+  const safeTo = sanitizeRedirectTo(redirectTo, '/account');
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -21,11 +23,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <p className="mt-1 text-xs text-slate-500">Access your orders, saved delivery addresses, and invoices.</p>
           </div>
 
-          <LoginFormClient redirectTo={redirectTo || '/account'} />
+          <LoginFormClient redirectTo={safeTo} />
 
           <div className="mt-6 pt-6 border-t border-slate-100 text-center text-xs text-slate-500">
             Don&apos;t have an account?{' '}
-            <Link href={`/auth/register${redirectTo ? `?redirectTo=${redirectTo}` : ''}`} className="font-bold text-teal-800 hover:underline">
+            <Link href={`/auth/register?redirectTo=${encodeURIComponent(safeTo)}`} className="font-bold text-teal-800 hover:underline">
               Create an account
             </Link>
           </div>

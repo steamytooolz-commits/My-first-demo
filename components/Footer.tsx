@@ -33,11 +33,11 @@ export default async function Footer() {
             <div className="space-y-1.5 text-xs font-medium">
               <div className="flex items-center gap-2 text-teal-800">
                 <ShieldCheck className="h-4 w-4" />
-                <span>POPIA Compliant • Secure Data Handling</span>
+                <span>POPIA-aligned • Secure Data Handling</span>
               </div>
               <div className="flex items-center gap-2 text-slate-600">
                 <FileText className="h-4 w-4 text-slate-400" />
-                <span>SARS VAT invoices on every order</span>
+                <span>Official invoices on every order</span>
               </div>
               <div className="flex items-center gap-2 text-slate-600">
                 <Truck className="h-4 w-4 text-slate-400" />
@@ -45,7 +45,7 @@ export default async function Footer() {
               </div>
               <Link href="/shipping" className="flex items-center gap-2 text-slate-600 hover:text-slate-900">
                 <RotateCcw className="h-4 w-4 text-slate-400" />
-                <span>7-day returns • 30-day guarantee</span>
+                <span>7-day cooling-off • 30-day defective-goods cover</span>
               </Link>
               {whatsappHref && (
                 <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[#128C4B] hover:underline">

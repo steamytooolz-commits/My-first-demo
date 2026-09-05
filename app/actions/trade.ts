@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/lib/db';
 import { requireUser } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { tradeApplicationSchema } from '@/lib/validation';
 
 export interface TradeActionResponse {
@@ -48,6 +49,10 @@ async function ensureTradeSchema(): Promise<void> {
 
 export async function submitTradeApplicationAction(prevState: any, formData: FormData): Promise<TradeActionResponse> {
   const user = await requireUser();
+  const tradeLimit = await checkRateLimit(`trade:${user.id}`, 3, 24 * 60 * 60 * 1000);
+  if (!tradeLimit.allowed) {
+    return { success: false, error: 'Too many trade applications. Please contact support.' };
+  }
   await ensureTradeSchema();
 
   const raw = {

@@ -50,7 +50,40 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
     items = [];
   }
 
+  // Frozen snapshots win over live settings: historic invoices must never mutate
+  // when store details change (TAA s30), and must stay buyer-redacted after erasure.
+  let seller: any = {};
+  try {
+    seller = JSON.parse(invoice.seller_json || '{}');
+  } catch {
+    seller = {};
+  }
+  const sellerName = seller.store_name || settings.store_name;
+  const sellerLine1 = seller.address_line1 || settings.address_line1;
+  const sellerLine2 = seller.address_line2 || settings.address_line2;
+  const sellerCity = seller.city || settings.city;
+  const sellerProvince = seller.province || settings.province;
+  const sellerPostal = seller.postal_code || settings.postal_code;
+  const sellerEmail = seller.contact_email || settings.contact_email;
+  const sellerPhone = seller.phone ?? settings.phone;
+  const sellerVat = seller.vat_number ?? settings.vat_number;
+
+  let buyer: any = {};
+  try {
+    buyer = JSON.parse(invoice.buyer_json || '{}');
+  } catch {
+    buyer = {};
+  }
   const shippingAddr = JSON.parse(invoice.shipping_address_json || '{}');
+  const billName = buyer.name || shippingAddr.full_name || 'Customer';
+  const billLine1 = buyer.address_line1 || shippingAddr.line1;
+  const billLine2 = buyer.address_line2 || shippingAddr.line2;
+  const billCity = buyer.city || shippingAddr.city;
+  const billProvince = buyer.province || shippingAddr.province;
+  const billPostal = buyer.postal_code || shippingAddr.postal_code;
+  const billPhone = buyer.phone || shippingAddr.phone;
+
+  const isTaxInvoice = Number(invoice.tax_cents || 0) > 0;
   const balanceDueCents = Math.max(0, invoice.total_cents - invoice.amount_paid_cents);
 
   return (
@@ -77,23 +110,23 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
                 PQ
               </span>
               <span className="font-serif text-2xl font-bold tracking-tight text-slate-900">
-                {settings.store_name}
+                {sellerName}
               </span>
             </div>
             <div className="text-xs text-slate-600 space-y-0.5">
-              <p>{settings.address_line1}</p>
-              {settings.address_line2 && <p>{settings.address_line2}</p>}
-              <p>{settings.city}, {settings.province} {settings.postal_code}, South Africa</p>
-              <p>Email: {settings.contact_email}{settings.phone ? ` • Phone: ${settings.phone}` : ''}</p>
-              {settings.vat_number && (
-                <p className="font-bold text-slate-900 pt-1">VAT Reg No: {settings.vat_number}</p>
+              <p>{sellerLine1}</p>
+              {sellerLine2 && <p>{sellerLine2}</p>}
+              <p>{sellerCity}, {sellerProvince} {sellerPostal}, South Africa</p>
+              <p>Email: {sellerEmail}{sellerPhone ? ` • Phone: ${sellerPhone}` : ''}</p>
+              {sellerVat && (
+                <p className="font-bold text-slate-900 pt-1">VAT Reg No: {sellerVat}</p>
               )}
             </div>
           </div>
 
           <div className="text-left sm:text-right space-y-1">
             <h1 className="font-serif text-3xl font-extrabold tracking-tight text-slate-900">
-              TAX INVOICE
+              {isTaxInvoice ? 'TAX INVOICE' : 'INVOICE'}
             </h1>
             <p className="font-mono text-xs font-bold text-teal-800">
               {invoice.invoice_number}
@@ -119,11 +152,11 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
               Billed &amp; Delivered To
             </h3>
             <div className="space-y-0.5 text-slate-800 font-medium">
-              <p className="font-bold text-slate-900 text-sm">{shippingAddr.full_name || 'Customer'}</p>
-              <p>{shippingAddr.line1}</p>
-              {shippingAddr.line2 && <p>{shippingAddr.line2}</p>}
-              <p>{shippingAddr.city}, {shippingAddr.province} {shippingAddr.postal_code}</p>
-              {shippingAddr.phone ? <p>Phone: {shippingAddr.phone}</p> : null}
+              <p className="font-bold text-slate-900 text-sm">{billName}</p>
+              <p>{billLine1}</p>
+              {billLine2 && <p>{billLine2}</p>}
+              <p>{billCity}, {billProvince} {billPostal}</p>
+              {billPhone ? <p>Phone: {billPhone}</p> : null}
             </div>
           </div>
 
@@ -145,7 +178,7 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
                 <th className="py-2.5 text-center">Qty</th>
                 <th className="py-2.5 text-right">Unit Price</th>
                 <th className="py-2.5 text-right">Discount</th>
-                <th className="py-2.5 text-right">VAT (15%)</th>
+                <th className="py-2.5 text-right">{isTaxInvoice ? 'VAT (15%)' : 'Tax'}</th>
                 <th className="py-2.5 text-right">Total (Incl)</th>
               </tr>
             </thead>
@@ -175,7 +208,8 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
 
         {/* Totals & Banking Details Block */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-8 pt-6 border-t-2 border-slate-200">
-          {/* Banking details */}
+          {/* Banking details — only while a balance is actually due */}
+          {balanceDueCents > 0 && (
           <div className="sm:col-span-7 space-y-3 text-xs">
             <h4 className="font-bold uppercase tracking-wider text-slate-900 text-[11px]">
               Electronic Funds Transfer (EFT) Details
@@ -188,9 +222,10 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
               <p><span className="text-slate-400">Payment Reference: </span><strong className="text-teal-900">{invoice.invoice_number}</strong></p>
             </div>
             <p className="text-[10px] text-slate-500 leading-relaxed">
-              Standard payment terms are {settings.invoice_due_days} days from issue. All queries regarding this tax invoice should be directed to {settings.contact_email}.
+              Standard payment terms are {settings.invoice_due_days} days from issue. All queries regarding this {isTaxInvoice ? 'tax invoice' : 'invoice'} should be directed to {settings.contact_email}.
             </p>
           </div>
+          )}
 
           {/* Financial calculations */}
           <div className="sm:col-span-5 space-y-2 text-xs">
@@ -213,10 +248,12 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
               </span>
             </div>
 
+            {Number(invoice.tax_cents || 0) > 0 && (
             <div className="flex justify-between text-slate-500 text-[11px]">
               <span>VAT Included (15%)</span>
               <span>{formatZar(invoice.tax_cents)}</span>
             </div>
+            )}
 
             <div className="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold text-slate-900">
               <span>Invoice Total</span>
@@ -239,8 +276,12 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
 
         {/* Footer legal note */}
         <div className="mt-12 pt-6 border-t border-slate-200 text-center text-[10px] text-slate-400 space-y-1">
-          <p>This is a computer-generated tax invoice issued in accordance with the South African Value-Added Tax Act, 1991.</p>
-          <p>{settings.store_name} • {settings.city}, South Africa</p>
+          {isTaxInvoice ? (
+            <p>This is a computer-generated tax invoice issued in accordance with the South African Value-Added Tax Act, 1991.</p>
+          ) : (
+            <p>This is a computer-generated invoice. No VAT was charged on this order.</p>
+          )}
+          <p>{sellerName} • {sellerCity}, South Africa</p>
         </div>
       </div>
     </div>

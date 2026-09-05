@@ -134,7 +134,7 @@ export default async function HomePage() {
               <div className="flex items-center gap-3">
                 <ShieldCheck className="h-5 w-5 text-teal-800 shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-slate-900">POPIA Compliant</p>
+                  <p className="text-xs font-bold text-slate-900">POPIA-Aligned</p>
                   <p className="text-[11px] text-slate-500">Privacy &amp; data export rights</p>
                 </div>
               </div>

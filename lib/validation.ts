@@ -105,8 +105,20 @@ export const variantSchema = z.object({
   active: z.boolean().default(true),
 });
 
-export const categorySchema = z.object({
-  name: z.string().min(1, 'Category name is required'),
+/**
+ * Allow only safe product image URLs: site-relative (/seed/…) or https://.
+ * Blocks javascript:, data:, //protocol-relative and other schemes that turn
+ * admin/CSV input into stored XSS or third-party tracking pixels.
+ */
+export function isSafeImageUrl(url: string): boolean {
+  const v = String(url || '').trim();
+  if (!v) return true;
+  if (v.startsWith('/') && !v.startsWith('//')) return true;
+  if (/^https:\/\/[^/]+\//.test(v) || /^https:\/\/[^/]+$/.test(v)) return true;
+  return false;
+}
+
+export const categorySchema = z.object({  name: z.string().min(1, 'Category name is required'),
   slug: z.string().min(1, 'Slug is required').regex(/^[a-z0-9-]+$/, 'Slug must contain only lowercase letters, numbers, and hyphens'),
   description: z.string().optional().default(''),
   parent_id: z.string().nullable().optional(),

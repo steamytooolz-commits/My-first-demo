@@ -69,7 +69,7 @@ export default async function AccountOverviewPage() {
               value={user.email}
               className="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-500 cursor-not-allowed"
             />
-            <p className="text-[10px] text-slate-400 mt-1">To change email, please contact customer care.</p>
+            <p className="text-[10px] text-slate-400 mt-1">To change email, please <Link href="/contact" className="font-semibold text-teal-800 hover:underline">contact customer care</Link>.</p>
           </div>
 
           <div className="sm:col-span-2 flex items-center gap-2">

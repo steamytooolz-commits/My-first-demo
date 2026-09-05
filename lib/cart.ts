@@ -114,7 +114,7 @@ export async function getOrCreateActiveCart(): Promise<{ cartId: string; isGuest
     cookieStore.set(GUEST_CART_COOKIE_NAME, newGuestToken, {
       httpOnly: true,
       secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
+      sameSite: 'lax',
       path: '/',
       maxAge: 30 * 24 * 60 * 60,
     });
@@ -197,7 +197,7 @@ export async function mergeGuestCart(userId: string): Promise<void> {
     cookieStore.set(GUEST_CART_COOKIE_NAME, '', {
       httpOnly: true,
       secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
+      sameSite: 'lax',
       path: '/',
       maxAge: 0,
     });
@@ -519,6 +519,9 @@ export async function removeCartItem(variantId: string): Promise<void> {
  * Update selected shipping method on active cart
  */
 export async function setShippingMethod(method: 'pickup' | 'standard' | 'express'): Promise<void> {
+  if (method !== 'pickup' && method !== 'standard' && method !== 'express') {
+    throw new Error('Invalid shipping method');
+  }
   const { cartId } = await getOrCreateActiveCart();
   await db.prepare(`UPDATE carts SET shipping_method = ?, updated_at = datetime('now') WHERE id = ?`).run(method, cartId);
 }

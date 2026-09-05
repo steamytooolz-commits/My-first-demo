@@ -4,6 +4,13 @@ import { useState } from 'react';
 import { loginAction } from '@/app/actions/auth';
 import { AlertCircle, Lock, Mail } from 'lucide-react';
 
+function safeRedirect(raw: string | null | undefined): string {
+  const v = String(raw || '').trim();
+  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/\\')) return '/account';
+  if (/[\\]/.test(v)) return '/account';
+  return v.slice(0, 200) || '/account';
+}
+
 export default function LoginFormClient({ redirectTo }: { redirectTo: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,7 +36,7 @@ export default function LoginFormClient({ redirectTo }: { redirectTo: string }) 
         return;
       }
 
-      window.location.href = result.redirectTo || redirectTo || '/account';
+      window.location.href = safeRedirect(result.redirectTo || redirectTo);
     } catch (err: any) {
       setIsSubmitting(false);
       setError(err?.message || 'Failed to sign in.');

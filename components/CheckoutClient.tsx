@@ -601,6 +601,10 @@ export default function CheckoutClient({
             </div>
           )}
 
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Please review your address, shipping and payment above — you can correct anything before placing the order (ECT Act s43(2)). Cooling-off rights are set out in <Link href="/shipping" className="font-semibold text-teal-800 hover:underline">Delivery &amp; Returns</Link>.
+          </p>
+
           <button
             type="submit"
             id="place-order-button"
@@ -612,7 +616,7 @@ export default function CheckoutClient({
 
           <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500 pt-2">
             <ShieldCheck className="h-4 w-4 text-teal-800" />
-            <span>POPIA Protected • 100% Deterministic Sandbox</span>
+            <span>POPIA-aligned • Demo sandbox, no real payments</span>
           </div>
         </div>
       </div>

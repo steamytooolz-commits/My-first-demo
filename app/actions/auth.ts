@@ -14,8 +14,9 @@ import {
   requireUser,
 } from '@/lib/auth';
 import { mergeGuestCart } from '@/lib/cart';
-import { checkLoginThrottle, recordLoginAttempt } from '@/lib/rate-limit';
+import { checkLoginThrottle, recordLoginAttempt, checkRateLimit } from '@/lib/rate-limit';
 import { registerSchema, loginSchema, profileUpdateSchema, changePasswordSchema } from '@/lib/validation';
+import { sanitizeRedirectTo } from '@/lib/auth';
 
 export interface ActionResponse {
   success: boolean;
@@ -86,7 +87,7 @@ export async function loginAction(prevState: any, formData: FormData): Promise<A
 
   revalidatePath('/', 'layout');
 
-  const destination = user.role === 'admin' && redirectTo === '/account' ? '/admin' : redirectTo;
+  const destination = user.role === 'admin' && redirectTo === '/account' ? '/admin' : sanitizeRedirectTo(redirectTo, '/account');
   return {
     success: true,
     redirectTo: destination,
@@ -96,6 +97,12 @@ export async function loginAction(prevState: any, formData: FormData): Promise<A
 export async function registerAction(prevState: any, formData: FormData): Promise<ActionResponse> {
   const headersList = await headers();
   const ip = headersList.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+
+  // Registration spam guard: 10 new accounts per IP per hour
+  const regLimit = await checkRateLimit(`register:${ip}`, 10, 60 * 60 * 1000);
+  if (!regLimit.allowed) {
+    return { success: false, error: 'Too many registrations from this network. Please try again later.' };
+  }
 
   const raw = {
     email: String(formData.get('email') || '').trim(),

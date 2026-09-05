@@ -54,7 +54,7 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
     }
   }
 
-  const rateLimitKey = `checkout:${user.id}:${input.ip || 'local'}`;
+  const rateLimitKey = `checkout:${user.id}`;
   const rateCheck = await checkRateLimit(rateLimitKey, 10, 15 * 60 * 1000);
   if (!rateCheck.allowed) {
     return {
@@ -348,11 +348,14 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
         item.tax_cents
       );
 
-      await db.prepare(`
+      const stockUpdate = await db.prepare(`
         UPDATE product_variants
         SET stock_qty = stock_qty - ?, updated_at = datetime('now')
-        WHERE id = ?
-      `).run(item.qty, item.variant_id);
+        WHERE id = ? AND stock_qty >= ?
+      `).run(item.qty, item.variant_id, item.qty) as any;
+      if (!stockUpdate || Number(stockUpdate.changes ?? 0) < 1) {
+        throw new Error(`Insufficient stock for "${item.product_name} - ${item.variant_name}". Another order took the last units.`);
+      }
 
       await db.prepare(`
         INSERT INTO stock_movements (id, variant_id, delta, reason, order_id, note, created_at)
@@ -462,10 +465,16 @@ export async function executeCheckout(user: User, input: CheckoutInput): Promise
     };
   };
 
-  if (isPg) {
-    return await (db as any).transaction(exec)();
-  } else {
-    return (db as any).transaction(exec)();
+  try {
+    if (isPg) {
+      return await (db as any).transaction(exec)();
+    } else {
+      return (db as any).transaction(exec)();
+    }
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    if (/insufficient stock/i.test(msg)) return { success: false, error: msg };
+    throw e;
   }
 }
 

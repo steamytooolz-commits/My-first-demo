@@ -45,6 +45,9 @@ export default async function ShippingPage() {
             <p>
               We deliver to street addresses and business offices across Gauteng, Western Cape, KwaZulu-Natal, Eastern Cape, Free State, Mpumalanga, Limpopo, North West, and Northern Cape.
             </p>
+            <p>
+              <strong>Pay on delivery</strong> (card or cash to the courier) is available in <strong>Gauteng only</strong>; all other provinces check out by card simulation or EFT.
+            </p>
           </section>
 
           <section className="space-y-2">

@@ -61,7 +61,7 @@ export default async function CustomerPrivacyPage() {
             <span>Important Statutory Compliance Notice:</span>
           </p>
           <p className="text-[11px] leading-relaxed text-amber-800">
-            Under Section 29 of the South African Tax Administration Act (TAA), issued VAT tax invoices and financial audit logs must be retained for 5 years. During account erasure, your name, phone, email, and password will be irreversibly de-identified to <code className="bg-amber-100 px-1 rounded font-mono">deleted-user-xxx@anonymized.invalid</code> while satisfying SARS fiscal retention rules.
+            Under the Tax Administration Act (TAA s29), issued VAT tax invoices must be retained for 5 years from submission of the return (longer if an audit or appeal is notified, s32). During erasure, your name, phone, email, and password are irreversibly de-identified to <code className="bg-amber-100 px-1 rounded font-mono">erased-&lt;id&gt;@invalid.local</code> while invoices are kept buyer-redacted to satisfy SARS retention rules.
           </p>
         </div>
 
@@ -72,7 +72,7 @@ export default async function CustomerPrivacyPage() {
               <span>Erasure Request Queued</span>
             </div>
             <p className="text-xs text-amber-800">
-              A 7-day cooling-off period is active. Your account is scheduled for automatic permanent anonymization on:
+              A 7-day review hold is active. Your account is scheduled for automatic permanent anonymization on:
             </p>
             <p className="font-mono text-xs font-bold text-amber-950">
               {new Date(pendingErasure.scheduled_for).toLocaleString()}
@@ -110,12 +110,23 @@ export default async function CustomerPrivacyPage() {
               <p className="mt-1 text-[11px] text-slate-500">Secondary confirmation required before scheduling erasure.</p>
             </div>
 
+            <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-slate-200 p-3">
+              <input
+                type="checkbox"
+                name="immediate"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-rose-700 focus:ring-rose-700"
+              />
+              <span className="text-[11px] text-slate-600 leading-relaxed">
+                <strong className="text-slate-800">Erase immediately</strong> — skip the 7-day review hold and anonymize as soon as processed. Invoices are still retained buyer-redacted for SARS.
+              </span>
+            </label>
+
             <button
               type="submit"
               className="rounded-xl bg-rose-700 px-4 py-2.5 font-semibold text-white shadow hover:bg-rose-800 transition-colors flex items-center gap-2"
             >
               <Trash2 className="h-4 w-4" />
-              <span>Request Account Erasure (7-Day Schedule)</span>
+              <span>Request Account Erasure</span>
             </button>
           </form>
         )}
