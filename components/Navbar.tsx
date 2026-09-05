@@ -2,16 +2,19 @@ import Link from 'next/link';
 import { ShoppingBag, User, Shield, Search } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { getCartSummary } from '@/lib/cart';
+import { getStoreSettings } from '@/lib/settings';
+import { formatZar } from '@/lib/money';
 
 export default async function Navbar() {
   const user = await getSessionUser();
   const cart = await getCartSummary();
+  const settings = await getStoreSettings();
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md">
       {/* Top utility notification bar */}
       <div className="bg-slate-900 px-4 py-1.5 text-center text-xs font-medium text-slate-200">
-        <span>Free standard delivery across South Africa on orders over R950 • Safe simulated payments</span>
+        <span>Free standard delivery across South Africa on orders over {formatZar(settings.free_shipping_threshold_cents)} • Safe simulated payments</span>
       </div>
 
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">

@@ -239,7 +239,11 @@ export async function getSessionUser(): Promise<User | null> {
     const tokenHash = hashSessionToken(token);
     const now = new Date().toISOString();
 
-    // 1. Try DB session (fast path, works locally and when DB is shared)
+    // 1. Try DB session (fast path, works locally and when DB is shared).
+    // dbOk tracks whether the database itself was reachable: the JWT fallback
+    // below runs ONLY when the DB errored (e.g. Vercel /tmp cold start), never
+    // when the lookup succeeded but found no row (logged out / revoked).
+    let dbOk = false;
     try {
       let row: User | undefined;
       try {
@@ -274,27 +278,32 @@ export async function getSessionUser(): Promise<User | null> {
       }
 
       if (row) return withTradeDefaults(row);
+      dbOk = true;
     } catch (dbErr) {
       console.warn('[auth] DB session lookup failed, trying JWT fallback:', (dbErr as Error).message);
     }
 
-    // 2. Fallback: stateless JWT verification (survives Vercel per-instance /tmp loss)
-    const jwt = verifyJwt(token);
-    if (jwt) {
-      try {
-        const user = await db.prepare(`
-          SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at,
-            account_type, trade_status, business_name, trade_vat_number, cipc_number, created_at, updated_at, deleted_at
-          FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
-        `).get(jwt.sub) as User | undefined;
-        if (user) return withTradeDefaults(user);
-      } catch (colErr) {
-        if (!/no such column/i.test(String((colErr as Error)?.message || ''))) throw colErr;
-        const user = await db.prepare(`
-          SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at, deleted_at
-          FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
-        `).get(jwt.sub) as User | undefined;
-        if (user) return withTradeDefaults(user);
+    // 2. Fallback: stateless JWT verification. Runs only when the DB was
+    // unreachable (dbOk === false), so destroying a session reliably logs out
+    // wherever the database is healthy. Survives Vercel per-instance /tmp loss.
+    if (!dbOk) {
+      const jwt = verifyJwt(token);
+      if (jwt) {
+        try {
+          const user = await db.prepare(`
+            SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at,
+              account_type, trade_status, business_name, trade_vat_number, cipc_number, created_at, updated_at, deleted_at
+            FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
+          `).get(jwt.sub) as User | undefined;
+          if (user) return withTradeDefaults(user);
+        } catch (colErr) {
+          if (!/no such column/i.test(String((colErr as Error)?.message || ''))) throw colErr;
+          const user = await db.prepare(`
+            SELECT id, email, full_name, phone, role, status, marketing_consent, poia_processing_consent_at, created_at, updated_at, deleted_at
+            FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL
+          `).get(jwt.sub) as User | undefined;
+          if (user) return withTradeDefaults(user);
+        }
       }
     }
 
