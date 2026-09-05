@@ -6,9 +6,11 @@ import { getStoreSettings } from '@/lib/settings';
 import { formatZar } from '@/lib/money';
 
 export default async function Navbar() {
-  const user = await getSessionUser();
-  const cart = await getCartSummary();
-  const settings = await getStoreSettings();
+  // Never let a cold-start DB hiccup white-screen every page: degrade to
+  // signed-out / empty-cart / default-settings instead of throwing.
+  const user = await getSessionUser().catch(() => null);
+  const cart = await getCartSummary().catch(() => ({ itemCount: 0 }) as any);
+  const settings = await getStoreSettings().catch(() => ({ free_shipping_threshold_cents: 95000 }) as any);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-md">
