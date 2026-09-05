@@ -8,3 +8,5 @@ coverage/
 data/
 .vercel/
 .turbo/
+private.md
+client-build-prompt.md
